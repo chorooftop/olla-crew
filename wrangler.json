@@ -1,0 +1,16 @@
+{
+	"compatibility_date": "2025-10-08",
+	"main": "src/index.ts",
+	"name": "olla-crew",
+	"upload_source_maps": true,
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_id": "8f772496-d575-4837-8488-ccef4911d86f",
+			"database_name": "d1-olla-crew-database"
+		}
+	],
+	"observability": {
+		"enabled": true
+	}
+}
