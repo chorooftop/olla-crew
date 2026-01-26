@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
+import { fetchAuthInfo } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,7 +29,7 @@ type Schedule = {
 
 const CATEGORY_LABELS: Record<string, string> = {
   REGULAR: "정모",
-  FLASH: "번개",
+  FLASH: "벙",
 };
 
 function formatScheduleLabel(schedule: Schedule) {
@@ -41,13 +42,7 @@ function formatScheduleLabel(schedule: Schedule) {
         hour: "2-digit",
         minute: "2-digit",
       });
-  const categoryLabel =
-    schedule.type && CATEGORY_LABELS[schedule.type]
-      ? CATEGORY_LABELS[schedule.type]
-      : schedule.type ?? "미분류";
-  return `[${categoryLabel}] ${schedule.title} · ${dateLabel}${
-    schedule.location ? ` · ${schedule.location}` : ""
-  }`;
+  return `${schedule.title} / ${dateLabel}`;
 }
 
 export default function AttendancePage() {
@@ -62,6 +57,19 @@ export default function AttendancePage() {
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [memo, setMemo] = useState("");
   const [saving, setSaving] = useState(false);
+  const [adminName, setAdminName] = useState<string>("관리자");
+  const [adminMemberId, setAdminMemberId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      const info = await fetchAuthInfo();
+      if (info) {
+        setAdminName(info.name ?? "관리자");
+        setAdminMemberId(info.memberId);
+      }
+    };
+    void load();
+  }, []);
 
   useEffect(() => {
     const loadMembers = async () => {
@@ -140,10 +148,14 @@ export default function AttendancePage() {
       toast.error("먼저 출석을 등록할 일정을 선택해 주세요.");
       return;
     }
+    if (!adminMemberId) {
+      toast.error("로그인 정보를 확인할 수 없습니다.");
+      return;
+    }
     setSaving(true);
     const payload = {
       member_id: selectedMember.id,
-      checked_by: selectedMember.id,
+      checked_by: adminMemberId,
       schedule_id: selectedScheduleId,
       memo: memo.trim() || null,
     };
@@ -197,6 +209,9 @@ export default function AttendancePage() {
               })}
             </div>
           )}
+        </div>
+        <div className="text-sm text-muted-foreground">
+          출석 체크 담당자: {adminName}
         </div>
         <Input
           placeholder="멤버 이름 검색"

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { isAuthed } from "@/lib/auth";
+import { fetchAuthInfo, getAuthToken } from "@/lib/auth";
 
 export default function AuthGuard({
   children,
@@ -14,11 +14,20 @@ export default function AuthGuard({
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (!isAuthed()) {
-      router.replace("/login");
-      return;
-    }
-    setReady(true);
+    const checkAuth = async () => {
+      const token = getAuthToken();
+      if (!token) {
+        router.replace("/login");
+        return;
+      }
+      const info = await fetchAuthInfo();
+      if (!info) {
+        router.replace("/login");
+        return;
+      }
+      setReady(true);
+    };
+    void checkAuth();
   }, [router, pathname]);
 
   if (!ready) {

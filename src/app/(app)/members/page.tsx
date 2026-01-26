@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
+import { fetchAuthInfo } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -59,7 +60,22 @@ export default function MembersPage() {
   const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("ALL");
-  const [sortOption, setSortOption] = useState("joined_desc");
+  const [withdrawFilter, setWithdrawFilter] = useState("ACTIVE");
+  const [sortOption, setSortOption] = useState("attendance_asc");
+  const [adminRole, setAdminRole] = useState<"ROOT" | "ADMIN" | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingMember, setEditingMember] = useState<Member | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editBirthDate, setEditBirthDate] = useState("");
+  const [editJoinedAt, setEditJoinedAt] = useState("");
+  const [editRole, setEditRole] = useState("MEMBER");
+  const [editMemo, setEditMemo] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawingMember, setWithdrawingMember] = useState<Member | null>(
+    null
+  );
+  const [withdrawing, setWithdrawing] = useState(false);
 
   const loadMembers = async () => {
     setLoading(true);
@@ -103,7 +119,14 @@ export default function MembersPage() {
   };
 
   useEffect(() => {
-    void loadMembers();
+    const load = async () => {
+      const info = await fetchAuthInfo();
+      if (info) {
+        setAdminRole(info.role);
+      }
+      void loadMembers();
+    };
+    void load();
   }, []);
 
   const handleSaveMemo = async (memberId: number, memo: string) => {
@@ -124,6 +147,82 @@ export default function MembersPage() {
     );
     toast.success("메모가 수정되었습니다.");
     return true;
+  };
+
+  const toDateInputValue = (value?: string | null) => {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    const offset = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+  };
+
+  const openEditDialog = (member: Member) => {
+    setEditingMember(member);
+    setEditName(member.name);
+    setEditBirthDate(toDateInputValue(member.birth_date));
+    setEditJoinedAt(toDateInputValue(member.joined_at));
+    setEditRole(member.role ?? "MEMBER");
+    setEditMemo(member.memo ?? "");
+    setEditOpen(true);
+  };
+
+  const handleUpdateMember = async () => {
+    if (!editingMember) return;
+    if (!editName.trim()) {
+      toast.error("이름을 입력해 주세요.");
+      return;
+    }
+    setSavingEdit(true);
+    const payload: Partial<Member> = {
+      name: editName.trim(),
+      birth_date: editBirthDate || null,
+      joined_at: editJoinedAt
+        ? new Date(editJoinedAt).toISOString()
+        : editingMember.joined_at,
+      memo: editMemo.trim() || null,
+    };
+    if (adminRole === "ROOT") {
+      payload.role = editRole;
+    }
+    const { error } = await supabase
+      .from("members")
+      .update(payload)
+      .eq("id", editingMember.id);
+    if (error) {
+      toast.error("멤버 정보 수정에 실패했습니다.");
+      setSavingEdit(false);
+      return;
+    }
+    toast.success("멤버 정보가 수정되었습니다.");
+    setSavingEdit(false);
+    setEditOpen(false);
+    setEditingMember(null);
+    void loadMembers();
+  };
+
+  const openWithdrawDialog = (member: Member) => {
+    setWithdrawingMember(member);
+    setWithdrawOpen(true);
+  };
+
+  const handleWithdrawMember = async () => {
+    if (!withdrawingMember) return;
+    setWithdrawing(true);
+    const { error } = await supabase
+      .from("members")
+      .update({ withdrawn_at: new Date().toISOString() })
+      .eq("id", withdrawingMember.id);
+    if (error) {
+      toast.error("탈퇴 처리에 실패했습니다.");
+      setWithdrawing(false);
+      return;
+    }
+    toast.success("멤버가 탈퇴 처리되었습니다.");
+    setWithdrawing(false);
+    setWithdrawOpen(false);
+    setWithdrawingMember(null);
+    void loadMembers();
   };
 
   const resetNewMemberForm = () => {
@@ -147,7 +246,7 @@ export default function MembersPage() {
       joined_at: newJoinedAt
         ? new Date(newJoinedAt).toISOString()
         : new Date().toISOString(),
-      role: newRole,
+      role: adminRole === "ROOT" ? newRole : "MEMBER",
       memo: newMemo.trim() || null,
       withdrawn_at: null,
     };
@@ -166,6 +265,21 @@ export default function MembersPage() {
     void loadMembers();
   };
 
+  const getDateTime = (value?: string | null) =>
+    value ? new Date(value).getTime() : NaN;
+
+  const getAttendanceOrJoined = (member: Member) => {
+    return latestAttendance[String(member.id)] ?? member.joined_at ?? null;
+  };
+
+  const getDaysSince = (value?: string | null) => {
+    if (!value) return null;
+    const time = new Date(value).getTime();
+    if (Number.isNaN(time)) return null;
+    const diffMs = Date.now() - time;
+    return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  };
+
   const filteredMembers = members
     .filter((member) => {
       const keyword = query.trim().toLowerCase();
@@ -176,13 +290,20 @@ export default function MembersPage() {
       if (roleFilter === "ALL") return true;
       return member.role === roleFilter;
     })
+    .filter((member) => {
+      if (withdrawFilter === "ALL") return true;
+      if (withdrawFilter === "WITHDRAWN") return Boolean(member.withdrawn_at);
+      return !member.withdrawn_at;
+    })
     .sort((a, b) => {
-      const getTime = (value?: string | null) =>
-        value ? new Date(value).getTime() : NaN;
-      const joinedA = getTime(a.joined_at);
-      const joinedB = getTime(b.joined_at);
-      const attendanceA = getTime(latestAttendance[String(a.id)]);
-      const attendanceB = getTime(latestAttendance[String(b.id)]);
+      const joinedA = getDateTime(a.joined_at);
+      const joinedB = getDateTime(b.joined_at);
+      const attendanceA = getDateTime(
+        latestAttendance[String(a.id)] ?? a.joined_at ?? null
+      );
+      const attendanceB = getDateTime(
+        latestAttendance[String(b.id)] ?? b.joined_at ?? null
+      );
 
       const compareDates = (left: number, right: number, ascending: boolean) => {
         const leftValid = Number.isFinite(left);
@@ -208,8 +329,8 @@ export default function MembersPage() {
 
   return (
     <div className="space-y-4">
-      <header className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
+      <header className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold">멤버 리스트</h1>
             <p className="text-sm text-muted-foreground">
@@ -262,15 +383,21 @@ export default function MembersPage() {
                   <label className="text-sm font-medium" htmlFor="new-role">
                     권한
                   </label>
-                  <select
-                    id="new-role"
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                    value={newRole}
-                    onChange={(event) => setNewRole(event.target.value)}
-                  >
-                    <option value="MEMBER">MEMBER</option>
-                    <option value="ADMIN">ADMIN</option>
-                  </select>
+                  {adminRole === "ROOT" ? (
+                    <select
+                      id="new-role"
+                      className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                      value={newRole}
+                      onChange={(event) => setNewRole(event.target.value)}
+                    >
+                      <option value="MEMBER">MEMBER</option>
+                      <option value="ADMIN">ADMIN</option>
+                    </select>
+                  ) : (
+                    <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                      MEMBER (ROOT만 변경 가능)
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium" htmlFor="new-memo">
@@ -295,9 +422,11 @@ export default function MembersPage() {
             </DialogContent>
           </Dialog>
         </div>
-        <div className="text-sm text-muted-foreground">
-            총 멤버: {members.length}명
+        <div>
+          <div className="text-sm text-muted-foreground">
+              총 멤버: {members.length}명
           </div>
+        </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             <select
@@ -308,6 +437,15 @@ export default function MembersPage() {
               <option value="ALL">전체</option>
               <option value="ADMIN">ADMIN</option>
               <option value="MEMBER">MEMBER</option>
+            </select>
+            <select
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm sm:w-[140px]"
+              value={withdrawFilter}
+              onChange={(event) => setWithdrawFilter(event.target.value)}
+            >
+              <option value="ACTIVE">탈퇴 아님</option>
+              <option value="WITHDRAWN">탈퇴</option>
+              <option value="ALL">전체</option>
             </select>
             <select
               className="w-full rounded-md border bg-background px-3 py-2 text-sm sm:w-[180px]"
@@ -347,8 +485,18 @@ export default function MembersPage() {
             검색된 멤버가 없습니다.
           </div>
         )}
-        {filteredMembers.map((member) => (
-          <Card key={member.id}>
+        {filteredMembers.map((member) => {
+          const latestAttendanceDate = latestAttendance[String(member.id)] ?? null;
+          const fallbackDate = getAttendanceOrJoined(member);
+          const daysSince = getDaysSince(fallbackDate);
+          const needsAttention =
+            !latestAttendanceDate && typeof daysSince === "number" && daysSince >= 30;
+
+          return (
+          <Card
+            key={member.id}
+            className={needsAttention ? "border-destructive/70" : undefined}
+          >
             <CardHeader className="flex flex-row items-start justify-between gap-4">
               <div>
                 <CardTitle className="text-lg">{member.name}</CardTitle>
@@ -357,17 +505,24 @@ export default function MembersPage() {
                   <span>가입일: {formatDate(member.joined_at)}</span>
                 </div>
               </div>
-              {member.role && (
-                <Badge variant={member.role === "ADMIN" ? "default" : "secondary"}>
-                  {member.role}
-                </Badge>
-              )}
+              <div className="flex flex-col items-end gap-2">
+                {member.role && (
+                  <Badge
+                    variant={member.role === "ADMIN" ? "default" : "secondary"}
+                  >
+                    {member.role}
+                  </Badge>
+                )}
+                {member.withdrawn_at && (
+                  <Badge variant="secondary">탈퇴</Badge>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="text-sm">
                 최근 출석일:{" "}
                 <span className="font-medium">
-                  {formatDate(latestAttendance[String(member.id)])}
+                  {latestAttendanceDate ? formatDate(latestAttendanceDate) : "미참여"}
                 </span>
               </div>
               <div className="rounded-lg border bg-muted/40 p-3 text-sm">
@@ -376,26 +531,153 @@ export default function MembersPage() {
                   {member.memo || "메모 없음"}
                 </p>
               </div>
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button variant="outline" className="w-full">
-                    메모 수정
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>{member.name} 메모 수정</DialogTitle>
-                  </DialogHeader>
-                  <MemoEditor
-                    member={member}
-                    onSave={handleSaveMemo}
-                  />
-                </DialogContent>
-              </Dialog>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" className="w-full">
+                      메모 수정
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>{member.name} 메모 수정</DialogTitle>
+                    </DialogHeader>
+                    <MemoEditor member={member} onSave={handleSaveMemo} />
+                  </DialogContent>
+                </Dialog>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => openEditDialog(member)}
+                >
+                  정보 수정
+                </Button>
+                <Button
+                  variant="destructive"
+                  className="w-full"
+                  onClick={() => openWithdrawDialog(member)}
+                  disabled={Boolean(member.withdrawn_at)}
+                >
+                  {member.withdrawn_at ? "탈퇴됨" : "탈퇴 처리"}
+                </Button>
+              </div>
             </CardContent>
           </Card>
-        ))}
+        );
+        })}
       </div>
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingMember ? `${editingMember.name} 정보 수정` : "정보 수정"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="edit-name">
+                이름
+              </label>
+              <Input
+                id="edit-name"
+                value={editName}
+                onChange={(event) => setEditName(event.target.value)}
+                placeholder="이름 입력"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="edit-birth">
+                생년월일
+              </label>
+              <Input
+                id="edit-birth"
+                type="date"
+                value={editBirthDate}
+                onChange={(event) => setEditBirthDate(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="edit-joined">
+                가입일
+              </label>
+              <Input
+                id="edit-joined"
+                type="date"
+                value={editJoinedAt}
+                onChange={(event) => setEditJoinedAt(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="edit-role">
+                권한
+              </label>
+              {adminRole === "ROOT" ? (
+                <select
+                  id="edit-role"
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  value={editRole}
+                  onChange={(event) => setEditRole(event.target.value)}
+                >
+                  <option value="MEMBER">MEMBER</option>
+                  <option value="ADMIN">ADMIN</option>
+                </select>
+              ) : (
+                <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                  {editingMember?.role ?? "MEMBER"} (ROOT만 변경 가능)
+                </div>
+              )}
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="edit-memo">
+                메모
+              </label>
+              <Textarea
+                id="edit-memo"
+                rows={4}
+                value={editMemo}
+                onChange={(event) => setEditMemo(event.target.value)}
+                placeholder="관리자 메모"
+              />
+            </div>
+            <Button
+              className="h-12 w-full text-base"
+              onClick={handleUpdateMember}
+              disabled={savingEdit}
+            >
+              {savingEdit ? "저장 중..." : "저장하기"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>멤버 탈퇴 처리</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            <p>
+              {withdrawingMember?.name ?? "해당 멤버"}를 탈퇴 처리하시겠어요?
+            </p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <Button
+                className="w-full"
+                variant="outline"
+                onClick={() => setWithdrawOpen(false)}
+              >
+                취소
+              </Button>
+              <Button
+                className="w-full"
+                variant="destructive"
+                onClick={handleWithdrawMember}
+                disabled={withdrawing}
+              >
+                {withdrawing ? "처리 중..." : "탈퇴 처리"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

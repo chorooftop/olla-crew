@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
+import { fetchAuthInfo } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -25,21 +26,24 @@ type Schedule = {
   title: string;
   type: string | null;
   scheduled_at: string;
+  city: string | null;
   location: string | null;
   memo: string | null;
   created_by: number | null;
   created_at: string | null;
 };
 
-type Member = {
-  id: number;
-  name: string;
-};
-
 const CATEGORY_OPTIONS = [
   { value: "REGULAR", label: "정모" },
-  { value: "FLASH", label: "번개" },
+  { value: "FLASH", label: "벙" },
+  { value: "EVENT", label: "이벤트" },
 ] as const;
+
+const CATEGORY_LABELS: Record<string, string> = {
+  REGULAR: "정모",
+  FLASH: "벙",
+  EVENT: "이벤트",
+};
 
 function formatDateTime(value?: string | null) {
   if (!value) return "-";
@@ -57,7 +61,6 @@ function formatDateTime(value?: string | null) {
 
 export default function CalendarPage() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -65,17 +68,35 @@ export default function CalendarPage() {
     CATEGORY_OPTIONS[0].value
   );
   const [scheduledAt, setScheduledAt] = useState("");
+  const [city, setCity] = useState("");
   const [location, setLocation] = useState("");
   const [memo, setMemo] = useState("");
-  const [createdBy, setCreatedBy] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
+  const [adminName, setAdminName] = useState<string>("관리자");
+  const [adminMemberId, setAdminMemberId] = useState<number | null>(null);
+  const [manualTitle, setManualTitle] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editType, setEditType] = useState<string>(CATEGORY_OPTIONS[0].value);
+  const [editScheduledAt, setEditScheduledAt] = useState("");
+  const [editCity, setEditCity] = useState("");
+  const [editLocation, setEditLocation] = useState("");
+  const [editMemo, setEditMemo] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editManualTitle, setEditManualTitle] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletingSchedule, setDeletingSchedule] = useState<Schedule | null>(
+    null
+  );
+  const [deleting, setDeleting] = useState(false);
 
   const loadSchedules = async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from("schedules")
       .select(
-        "id,title,type,scheduled_at,location,memo,created_by,created_at"
+        "id,title,type,scheduled_at,city,location,memo,created_by,created_at"
       )
       .order("scheduled_at", { ascending: false });
 
@@ -90,17 +111,14 @@ export default function CalendarPage() {
   };
 
   useEffect(() => {
-    const loadMembers = async () => {
-      const { data } = await supabase
-        .from("members")
-        .select("id,name")
-        .order("name");
-      const list = (data as Member[]) ?? [];
-      setMembers(list);
-      setCreatedBy(list[0]?.id ?? null);
+    const load = async () => {
+      const info = await fetchAuthInfo();
+      if (info) {
+        setAdminName(info.name ?? "관리자");
+        setAdminMemberId(info.memberId);
+      }
     };
-
-    void loadMembers();
+    void load();
     void loadSchedules();
   }, []);
 
@@ -108,9 +126,114 @@ export default function CalendarPage() {
     setTitle("");
     settype(CATEGORY_OPTIONS[0].value);
     setScheduledAt("");
+    setCity("");
     setLocation("");
     setMemo("");
-    setCreatedBy(members[0]?.id ?? null);
+    setManualTitle(false);
+  };
+
+  const buildTitle = (typeValue: string, cityValue: string, locationValue: string) => {
+    const typeLabel = CATEGORY_LABELS[typeValue] ?? typeValue ?? "일정";
+    const cityLabel = cityValue.trim();
+    const locationLabel = locationValue.trim();
+    if (!cityLabel && !locationLabel) {
+      return `[${typeLabel}]`;
+    }
+    if (cityLabel && locationLabel) {
+      return `[${typeLabel}] ${cityLabel} - ${locationLabel}`;
+    }
+    return `[${typeLabel}] ${cityLabel || locationLabel}`;
+  };
+
+  useEffect(() => {
+    if (manualTitle) return;
+    setTitle(buildTitle(type, city, location));
+  }, [type, city, location, manualTitle]);
+
+  const toDateTimeInput = (value?: string | null) => {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    const offset = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+  };
+
+  const openEditDialog = (schedule: Schedule) => {
+    setEditingSchedule(schedule);
+    setEditTitle(schedule.title);
+    setEditType(schedule.type ?? CATEGORY_OPTIONS[0].value);
+    setEditScheduledAt(toDateTimeInput(schedule.scheduled_at));
+    setEditCity(schedule.city ?? "");
+    setEditLocation(schedule.location ?? "");
+    setEditMemo(schedule.memo ?? "");
+    setEditManualTitle(false);
+    setEditOpen(true);
+  };
+
+  useEffect(() => {
+    if (editManualTitle) return;
+    setEditTitle(buildTitle(editType, editCity, editLocation));
+  }, [editType, editCity, editLocation, editManualTitle]);
+
+  const handleUpdateSchedule = async () => {
+    if (!editingSchedule) return;
+    if (!editTitle.trim()) {
+      toast.error("일정 제목을 입력해 주세요.");
+      return;
+    }
+    if (!editScheduledAt) {
+      toast.error("모임 일시를 선택해 주세요.");
+      return;
+    }
+
+    setSavingEdit(true);
+    const payload = {
+      title: editTitle.trim(),
+      type: editType,
+      scheduled_at: new Date(editScheduledAt).toISOString(),
+      city: editCity.trim() || null,
+      location: editLocation.trim() || null,
+      memo: editMemo.trim() || null,
+    };
+
+    const { error } = await supabase
+      .from("schedules")
+      .update(payload)
+      .eq("id", editingSchedule.id);
+    if (error) {
+      toast.error("일정 수정에 실패했습니다.");
+      setSavingEdit(false);
+      return;
+    }
+    toast.success("일정이 수정되었습니다.");
+    setSavingEdit(false);
+    setEditOpen(false);
+    setEditingSchedule(null);
+    void loadSchedules();
+  };
+
+  const openDeleteDialog = (schedule: Schedule) => {
+    setDeletingSchedule(schedule);
+    setDeleteOpen(true);
+  };
+
+  const handleDeleteSchedule = async () => {
+    if (!deletingSchedule) return;
+    setDeleting(true);
+    const { error } = await supabase
+      .from("schedules")
+      .delete()
+      .eq("id", deletingSchedule.id);
+    if (error) {
+      toast.error("일정 삭제에 실패했습니다.");
+      setDeleting(false);
+      return;
+    }
+    toast.success("일정이 삭제되었습니다.");
+    setDeleting(false);
+    setDeleteOpen(false);
+    setDeletingSchedule(null);
+    void loadSchedules();
   };
 
   const handleCreateSchedule = async () => {
@@ -122,15 +245,20 @@ export default function CalendarPage() {
       toast.error("모임 일시를 선택해 주세요.");
       return;
     }
+    if (!adminMemberId) {
+      toast.error("로그인 정보를 확인할 수 없습니다.");
+      return;
+    }
 
     setCreating(true);
     const payload = {
       title: title.trim(),
       type,
       scheduled_at: new Date(scheduledAt).toISOString(),
+      city: city.trim() || null,
       location: location.trim() || null,
       memo: memo.trim() || null,
-      created_by: createdBy,
+      created_by: adminMemberId,
     };
 
     const { error } = await supabase.from("schedules").insert(payload);
@@ -154,7 +282,7 @@ export default function CalendarPage() {
           <div>
             <h1 className="text-2xl font-semibold">모임 일정 관리</h1>
             <p className="text-sm text-muted-foreground">
-              정모/번개 일정을 등록하고 관리하세요.
+              정모/벙 일정을 등록하고 관리하세요.
             </p>
           </div>
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
@@ -170,12 +298,23 @@ export default function CalendarPage() {
                   <label className="text-sm font-medium" htmlFor="schedule-title">
                     일정 제목
                   </label>
-                  <Input
-                    id="schedule-title"
-                    value={title}
-                    onChange={(event) => setTitle(event.target.value)}
-                    placeholder="예: 토요 정모"
-                  />
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <Input
+                      id="schedule-title"
+                      value={title}
+                      onChange={(event) => setTitle(event.target.value)}
+                      placeholder="예: [정모] 강남 - 더클라임"
+                      disabled={!manualTitle}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="sm:w-28"
+                      onClick={() => setManualTitle((prev) => !prev)}
+                    >
+                      {manualTitle ? "자동 입력" : "수동 수정"}
+                    </Button>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <label
@@ -209,17 +348,28 @@ export default function CalendarPage() {
                   />
                 </div>
                 <div className="space-y-2">
+                  <label className="text-sm font-medium" htmlFor="schedule-city">
+                    장소
+                  </label>
+                  <Input
+                    id="schedule-city"
+                    value={city}
+                    onChange={(event) => setCity(event.target.value)}
+                    placeholder="예: 강남"
+                  />
+                </div>
+                <div className="space-y-2">
                   <label
                     className="text-sm font-medium"
                     htmlFor="schedule-location"
                   >
-                    장소
+                    암장
                   </label>
                   <Input
                     id="schedule-location"
                     value={location}
                     onChange={(event) => setLocation(event.target.value)}
-                    placeholder="예: 더클라임 강남"
+                    placeholder="예: 더클라임"
                   />
                 </div>
                 <div className="space-y-2">
@@ -234,30 +384,8 @@ export default function CalendarPage() {
                     placeholder="공지사항, 준비물 등"
                   />
                 </div>
-                <div className="space-y-2">
-                  <label
-                    className="text-sm font-medium"
-                    htmlFor="schedule-created-by"
-                  >
-                    작성자
-                  </label>
-                  <select
-                    id="schedule-created-by"
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                    value={createdBy ?? ""}
-                    onChange={(event) =>
-                      setCreatedBy(event.target.value ? Number(event.target.value) : null)
-                    }
-                  >
-                    {members.length === 0 && (
-                      <option value="">등록된 멤버 없음</option>
-                    )}
-                    {members.map((member) => (
-                      <option key={member.id} value={member.id}>
-                        {member.name}
-                      </option>
-                    ))}
-                  </select>
+                <div className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+                  작성자: {adminName}
                 </div>
                 <Button
                   className="h-12 w-full text-base"
@@ -299,18 +427,165 @@ export default function CalendarPage() {
                   유형: {categoryLabel}
                 </div>
                 <div>일시: {formatDateTime(schedule.scheduled_at)}</div>
-                {schedule.location && <div>장소: {schedule.location}</div>}
+                {schedule.city && <div>장소: {schedule.city}</div>}
+                {schedule.location && <div>암장: {schedule.location}</div>}
                 {schedule.memo && (
                   <div className="rounded-lg border bg-muted/40 p-3 text-sm">
                     <div className="text-xs text-muted-foreground">메모</div>
                     <p className="mt-1 whitespace-pre-line">{schedule.memo}</p>
                   </div>
                 )}
+                <div className="grid grid-cols-1 gap-2 pt-2 sm:grid-cols-2">
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => openEditDialog(schedule)}
+                  >
+                    일정 수정
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="w-full"
+                    onClick={() => openDeleteDialog(schedule)}
+                  >
+                    일정 삭제
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           );
         })}
       </div>
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingSchedule ? `${editingSchedule.title} 수정` : "일정 수정"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="edit-title">
+                일정 제목
+              </label>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Input
+                  id="edit-title"
+                  value={editTitle}
+                  onChange={(event) => setEditTitle(event.target.value)}
+                  disabled={!editManualTitle}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="sm:w-28"
+                  onClick={() => setEditManualTitle((prev) => !prev)}
+                >
+                  {editManualTitle ? "자동 입력" : "수동 수정"}
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="edit-type">
+                일정 유형
+              </label>
+              <select
+                id="edit-type"
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                value={editType}
+                onChange={(event) => setEditType(event.target.value)}
+              >
+                {CATEGORY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="edit-time">
+                모임 일시
+              </label>
+              <Input
+                id="edit-time"
+                type="datetime-local"
+                value={editScheduledAt}
+                onChange={(event) => setEditScheduledAt(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="edit-city">
+                장소
+              </label>
+              <Input
+                id="edit-city"
+                value={editCity}
+                onChange={(event) => setEditCity(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="edit-location">
+                암장
+              </label>
+              <Input
+                id="edit-location"
+                value={editLocation}
+                onChange={(event) => setEditLocation(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="edit-memo">
+                메모
+              </label>
+              <Textarea
+                id="edit-memo"
+                rows={4}
+                value={editMemo}
+                onChange={(event) => setEditMemo(event.target.value)}
+              />
+            </div>
+            <div className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+              작성자: {adminName}
+            </div>
+            <Button
+              className="h-12 w-full text-base"
+              onClick={handleUpdateSchedule}
+              disabled={savingEdit}
+            >
+              {savingEdit ? "저장 중..." : "수정 저장"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>일정 삭제</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            <p>
+              {deletingSchedule?.title ?? "해당 일정"}을(를) 삭제하시겠어요?
+            </p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <Button
+                className="w-full"
+                variant="outline"
+                onClick={() => setDeleteOpen(false)}
+              >
+                취소
+              </Button>
+              <Button
+                className="w-full"
+                variant="destructive"
+                onClick={handleDeleteSchedule}
+                disabled={deleting}
+              >
+                {deleting ? "삭제 중..." : "삭제하기"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { setAuthed } from "@/lib/auth";
+import { setAuthInfo, setAuthToken } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -35,7 +35,14 @@ export default function LoginPage() {
         return;
       }
 
-      setAuthed(true);
+      setAuthToken(data.token);
+      setAuthInfo({
+        adminUserId: data.adminUser.adminUserId,
+        loginId: data.adminUser.loginId,
+        memberId: data.adminUser.memberId,
+        role: data.adminUser.role,
+        name: data.adminUser.name ?? null,
+      });
       toast.success("로그인 완료!");
       router.replace("/members");
     } catch (error) {
