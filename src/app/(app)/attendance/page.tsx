@@ -12,31 +12,52 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Calendar } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 
 type Member = {
   id: number;
   name: string;
 };
 
-function toDateKey(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
+type Schedule = {
+  id: number;
+  title: string;
+  type: string | null;
+  scheduled_at: string;
+  location: string | null;
+};
 
-function formatDateLabel(date: Date) {
-  return date.toLocaleDateString("ko-KR");
+const CATEGORY_LABELS: Record<string, string> = {
+  REGULAR: "정모",
+  FLASH: "번개",
+};
+
+function formatScheduleLabel(schedule: Schedule) {
+  const date = new Date(schedule.scheduled_at);
+  const dateLabel = Number.isNaN(date.getTime())
+    ? schedule.scheduled_at
+    : date.toLocaleString("ko-KR", {
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+  const categoryLabel =
+    schedule.type && CATEGORY_LABELS[schedule.type]
+      ? CATEGORY_LABELS[schedule.type]
+      : schedule.type ?? "미분류";
+  return `[${categoryLabel}] ${schedule.title} · ${dateLabel}${
+    schedule.location ? ` · ${schedule.location}` : ""
+  }`;
 }
 
 export default function AttendancePage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [selectedScheduleId, setSelectedScheduleId] = useState<number | null>(
+    null
+  );
   const [open, setOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [memo, setMemo] = useState("");
@@ -63,6 +84,42 @@ export default function AttendancePage() {
     void loadMembers();
   }, []);
 
+  useEffect(() => {
+    const loadSchedules = async () => {
+      const now = new Date();
+      const start = new Date(now);
+      start.setDate(start.getDate() - 30);
+      const end = new Date(now);
+      end.setDate(end.getDate() + 90);
+
+      const { data, error } = await supabase
+        .from("schedules")
+        .select("id,title,type,scheduled_at,location")
+        .gte("scheduled_at", start.toISOString())
+        .lte("scheduled_at", end.toISOString())
+        .order("scheduled_at", { ascending: true });
+
+      if (error) {
+        toast.error("일정 정보를 불러오지 못했습니다.");
+        setSchedules([]);
+        setSelectedScheduleId(null);
+        return;
+      }
+
+      const nowTime = now.getTime();
+      const items = (data as Schedule[]).sort((a, b) => {
+        const diffA = Math.abs(new Date(a.scheduled_at).getTime() - nowTime);
+        const diffB = Math.abs(new Date(b.scheduled_at).getTime() - nowTime);
+        if (diffA !== diffB) return diffA - diffB;
+        return new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
+      });
+      setSchedules(items);
+      setSelectedScheduleId(items[0]?.id ?? null);
+    };
+
+    void loadSchedules();
+  }, []);
+
   const filteredMembers = useMemo(() => {
     const keyword = query.trim().toLowerCase();
     if (!keyword) return members;
@@ -79,11 +136,15 @@ export default function AttendancePage() {
 
   const handleSubmit = async () => {
     if (!selectedMember) return;
+    if (!selectedScheduleId) {
+      toast.error("먼저 출석을 등록할 일정을 선택해 주세요.");
+      return;
+    }
     setSaving(true);
     const payload = {
       member_id: selectedMember.id,
       checked_by: selectedMember.id,
-      attendance_date: toDateKey(selectedDate),
+      schedule_id: selectedScheduleId,
       memo: memo.trim() || null,
     };
 
@@ -110,31 +171,32 @@ export default function AttendancePage() {
 
       <div className="space-y-3">
         <div className="space-y-2">
-          <div className="text-sm font-medium">출석 날짜</div>
-          <div className="flex items-center gap-2">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="flex-1 justify-start">
-                  {formatDateLabel(selectedDate)}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={(date) => date && setSelectedDate(date)}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
-            <Button
-              variant="outline"
-              className="shrink-0"
-              onClick={() => setSelectedDate(new Date())}
-            >
-              오늘 선택
-            </Button>
-          </div>
+          <div className="text-sm font-medium">일정 선택</div>
+          {schedules.length === 0 ? (
+            <div className="rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+              등록된 일정이 없습니다.
+            </div>
+          ) : (
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {schedules.map((schedule) => {
+                const active = schedule.id === selectedScheduleId;
+                return (
+                  <button
+                    key={schedule.id}
+                    type="button"
+                    onClick={() => setSelectedScheduleId(schedule.id)}
+                    className={
+                      active
+                        ? "shrink-0 rounded-full border border-primary bg-primary/10 px-3 py-2 text-left text-xs font-medium text-primary"
+                        : "shrink-0 rounded-full border px-3 py-2 text-left text-xs text-muted-foreground"
+                    }
+                  >
+                    {formatScheduleLabel(schedule)}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
         <Input
           placeholder="멤버 이름 검색"

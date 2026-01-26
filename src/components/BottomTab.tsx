@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 const tabs = [
   { href: "/members", label: "멤버", icon: Users },
   { href: "/attendance", label: "출석", icon: CheckCircle2 },
-  { href: "/calendar", label: "캘린더", icon: Calendar },
+  { href: "/calendar", label: "일정", icon: Calendar },
 ];
 
 export default function BottomTab() {

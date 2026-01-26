@@ -33,7 +33,7 @@ type Member = {
 
 type AttendanceLog = {
   member_id: number;
-  attendance_date: string;
+  schedule: { scheduled_at: string | null }[] | null;
 };
 
 function formatDate(value?: string | null) {
@@ -76,8 +76,11 @@ export default function MembersPage() {
 
     const { data: logData, error: logError } = await supabase
       .from("attendance_logs")
-      .select("member_id,attendance_date")
-      .order("attendance_date", { ascending: false });
+      .select("member_id,schedule:schedules(scheduled_at)")
+      .order("scheduled_at", {
+        ascending: false,
+        foreignTable: "schedules",
+      });
 
     if (logError) {
       toast.error("출석 기록을 불러오지 못했습니다.");
@@ -88,8 +91,9 @@ export default function MembersPage() {
     const latestMap: Record<string, string> = {};
     (logData as AttendanceLog[]).forEach((log) => {
       const key = String(log.member_id);
-      if (!latestMap[key]) {
-        latestMap[key] = log.attendance_date;
+      const scheduledAt = log.schedule?.[0]?.scheduled_at;
+      if (!latestMap[key] && scheduledAt) {
+        latestMap[key] = scheduledAt;
       }
     });
 
