@@ -34,7 +34,7 @@ type Member = {
 
 type AttendanceLog = {
   member_id: number;
-  schedule: { scheduled_at: string | null }[] | null;
+  schedule: { scheduled_at: string | null } | null;
 };
 
 function formatDate(value?: string | null) {
@@ -92,7 +92,9 @@ export default function MembersPage() {
 
     const { data: logData, error: logError } = await supabase
       .from("attendance_logs")
-      .select("member_id,schedule:schedules(scheduled_at)")
+      .select(
+        "member_id,schedule:schedules!attendance_logs_schedule_id_fkey(scheduled_at)"
+      )
       .order("scheduled_at", {
         ascending: false,
         foreignTable: "schedules",
@@ -105,10 +107,16 @@ export default function MembersPage() {
     }
 
     const latestMap: Record<string, string> = {};
-    (logData as AttendanceLog[]).forEach((log) => {
+    (logData as unknown as AttendanceLog[]).forEach((log) => {
       const key = String(log.member_id);
-      const scheduledAt = log.schedule?.[0]?.scheduled_at;
-      if (!latestMap[key] && scheduledAt) {
+      const scheduledAt = log.schedule?.scheduled_at;
+      if (!scheduledAt) return;
+      const nextTime = new Date(scheduledAt).getTime();
+      if (Number.isNaN(nextTime)) return;
+      const prevTime = latestMap[key]
+        ? new Date(latestMap[key]).getTime()
+        : NaN;
+      if (!Number.isFinite(prevTime) || nextTime > prevTime) {
         latestMap[key] = scheduledAt;
       }
     });
@@ -422,12 +430,18 @@ export default function MembersPage() {
             </DialogContent>
           </Dialog>
         </div>
-        <div>
-          <div className="text-sm text-muted-foreground">
-              총 멤버: {members.length}명
-          </div>
-        </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>총 멤버: {members.length}명</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadMembers}
+              disabled={loading}
+            >
+              새로고침
+            </Button>
+          </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             <select
               className="w-full rounded-md border bg-background px-3 py-2 text-sm sm:w-[140px]"

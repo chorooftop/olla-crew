@@ -27,6 +27,11 @@ type Schedule = {
   location: string | null;
 };
 
+type AttendanceLog = {
+  id: number;
+  member_id: number;
+};
+
 const CATEGORY_LABELS: Record<string, string> = {
   REGULAR: "정모",
   FLASH: "벙",
@@ -59,6 +64,15 @@ export default function AttendancePage() {
   const [saving, setSaving] = useState(false);
   const [adminName, setAdminName] = useState<string>("관리자");
   const [adminMemberId, setAdminMemberId] = useState<number | null>(null);
+  const [attendanceMap, setAttendanceMap] = useState<Record<number, number>>(
+    {}
+  );
+  const [attendanceCount, setAttendanceCount] = useState(0);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [attendanceOpen, setAttendanceOpen] = useState(false);
+  const [attendanceList, setAttendanceList] = useState<
+    { id: number; member: { id: number; name: string } | null }[]
+  >([]);
 
   useEffect(() => {
     const load = async () => {
@@ -128,6 +142,96 @@ export default function AttendancePage() {
     void loadSchedules();
   }, []);
 
+  useEffect(() => {
+    const loadAttendance = async () => {
+      if (!selectedScheduleId) {
+        setAttendanceMap({});
+        setAttendanceCount(0);
+        return;
+      }
+      setAttendanceLoading(true);
+      const { data, error } = await supabase
+        .from("attendance_logs")
+        .select("id,member_id")
+        .eq("schedule_id", selectedScheduleId);
+
+      if (error) {
+        toast.error("출석 정보를 불러오지 못했습니다.");
+        setAttendanceMap({});
+        setAttendanceCount(0);
+        setAttendanceLoading(false);
+        return;
+      }
+
+      const map: Record<number, number> = {};
+      (data as AttendanceLog[]).forEach((row) => {
+        map[row.member_id] = row.id;
+      });
+      setAttendanceMap(map);
+      setAttendanceCount(data?.length ?? 0);
+      setAttendanceLoading(false);
+    };
+
+    void loadAttendance();
+  }, [selectedScheduleId]);
+
+  const loadAttendanceList = async () => {
+    if (!selectedScheduleId) return;
+    setAttendanceLoading(true);
+    const { data, error } = await supabase
+      .from("attendance_logs")
+      .select("id,member:members!attendance_logs_member_id_fkey(id,name)")
+      .eq("schedule_id", selectedScheduleId);
+    if (error) {
+      toast.error("출석자 정보를 불러오지 못했습니다.");
+      setAttendanceList([]);
+      setAttendanceLoading(false);
+      return;
+    }
+    const normalized =
+      (data as {
+        id: number;
+        member: { id: number; name: string } | { id: number; name: string }[] | null;
+      }[] | null) ?? [];
+    setAttendanceList(
+      normalized.map((row) => ({
+        id: row.id,
+        member: Array.isArray(row.member) ? row.member[0] ?? null : row.member,
+      }))
+    );
+    setAttendanceLoading(false);
+  };
+
+  const openAttendanceDialog = async () => {
+    setAttendanceOpen(true);
+    await loadAttendanceList();
+  };
+
+  const handleRemoveAttendance = async (logId: number) => {
+    const { error } = await supabase
+      .from("attendance_logs")
+      .delete()
+      .eq("id", logId);
+    if (error) {
+      toast.error("출석 해제에 실패했습니다.");
+      return;
+    }
+    toast.success("출석 해제 완료!");
+    await loadAttendanceList();
+    if (selectedScheduleId) {
+      const { data } = await supabase
+        .from("attendance_logs")
+        .select("id,member_id")
+        .eq("schedule_id", selectedScheduleId);
+      const map: Record<number, number> = {};
+      (data as AttendanceLog[] | null)?.forEach((row) => {
+        map[row.member_id] = row.id;
+      });
+      setAttendanceMap(map);
+      setAttendanceCount(data?.length ?? 0);
+    }
+  };
+
   const filteredMembers = useMemo(() => {
     const keyword = query.trim().toLowerCase();
     if (!keyword) return members;
@@ -153,23 +257,49 @@ export default function AttendancePage() {
       return;
     }
     setSaving(true);
-    const payload = {
-      member_id: selectedMember.id,
-      checked_by: adminMemberId,
-      schedule_id: selectedScheduleId,
-      memo: memo.trim() || null,
-    };
+    const existingLogId = attendanceMap[selectedMember.id];
 
-    const { error } = await supabase.from("attendance_logs").insert(payload);
-    if (error) {
-      toast.error("출석 체크에 실패했습니다.");
-      setSaving(false);
-      return;
+    if (existingLogId) {
+      const { error } = await supabase
+        .from("attendance_logs")
+        .delete()
+        .eq("id", existingLogId);
+      if (error) {
+        toast.error("출석 해제에 실패했습니다.");
+        setSaving(false);
+        return;
+      }
+      toast.success(`${selectedMember.name} 출석 해제 완료!`);
+    } else {
+      const payload = {
+        member_id: selectedMember.id,
+        checked_by: adminMemberId,
+        schedule_id: selectedScheduleId,
+        memo: memo.trim() || null,
+      };
+
+      const { error } = await supabase.from("attendance_logs").insert(payload);
+      if (error) {
+        toast.error("출석 체크에 실패했습니다.");
+        setSaving(false);
+        return;
+      }
+      toast.success(`${selectedMember.name} 출석 완료!`);
     }
 
-    toast.success(`${selectedMember.name} 출석 완료!`);
     setSaving(false);
     setOpen(false);
+    setMemo("");
+    const { data } = await supabase
+      .from("attendance_logs")
+      .select("id,member_id")
+      .eq("schedule_id", selectedScheduleId);
+    const map: Record<number, number> = {};
+    (data as AttendanceLog[] | null)?.forEach((row) => {
+      map[row.member_id] = row.id;
+    });
+    setAttendanceMap(map);
+    setAttendanceCount(data?.length ?? 0);
   };
 
   return (
@@ -210,8 +340,15 @@ export default function AttendancePage() {
             </div>
           )}
         </div>
-        <div className="text-sm text-muted-foreground">
-          출석 체크 담당자: {adminName}
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <span>출석 체크 담당자: {adminName}</span>
+          <button
+            type="button"
+            className="rounded-full border px-2 py-0.5 text-xs"
+            onClick={openAttendanceDialog}
+          >
+            출석 인원: {attendanceLoading ? "..." : attendanceCount}명
+          </button>
         </div>
         <Input
           placeholder="멤버 이름 검색"
@@ -233,7 +370,9 @@ export default function AttendancePage() {
       )}
 
       <div className="space-y-3">
-        {filteredMembers.map((member) => (
+        {filteredMembers.map((member) => {
+          const attended = Boolean(attendanceMap[member.id]);
+          return (
           <div
             key={member.id}
             className="flex items-center justify-between rounded-lg border bg-card p-4"
@@ -242,11 +381,13 @@ export default function AttendancePage() {
             <Button
               className="h-12 px-6 text-base"
               onClick={() => openDialog(member)}
+              variant={attended ? "secondary" : "default"}
             >
-              출석
+              {attended ? "출석 해제" : "출석하기"}
             </Button>
           </div>
-        ))}
+        );
+        })}
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -271,9 +412,49 @@ export default function AttendancePage() {
               onClick={handleSubmit}
               disabled={saving}
             >
-              {saving ? "저장 중..." : "출석 등록"}
+              {saving
+                ? "처리 중..."
+                : attendanceMap[selectedMember?.id ?? 0]
+                ? "출석 해제하기"
+                : "출석하기"}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={attendanceOpen} onOpenChange={setAttendanceOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>출석자 리스트</DialogTitle>
+          </DialogHeader>
+          {attendanceLoading ? (
+            <div className="text-sm text-muted-foreground">
+              출석자 정보를 불러오는 중...
+            </div>
+          ) : attendanceList.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              출석 기록이 없습니다.
+            </div>
+          ) : (
+            <div className="space-y-2 text-sm">
+              {attendanceList.map((row) => (
+                <div
+                  key={row.id}
+                  className="flex items-center justify-between rounded-lg border bg-muted/40 p-2"
+                >
+                  <div className="font-medium">
+                    {row.member?.name ?? "알 수 없음"}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleRemoveAttendance(row.id)}
+                  >
+                    출석 해제
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

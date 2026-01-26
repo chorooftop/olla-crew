@@ -33,6 +33,12 @@ type Schedule = {
   created_at: string | null;
 };
 
+type ScheduleAttendance = {
+  id: number;
+  member: { id: number; name: string } | null;
+  memo: string | null;
+};
+
 const CATEGORY_OPTIONS = [
   { value: "REGULAR", label: "정모" },
   { value: "FLASH", label: "벙" },
@@ -90,6 +96,12 @@ export default function CalendarPage() {
     null
   );
   const [deleting, setDeleting] = useState(false);
+  const [attendanceOpen, setAttendanceOpen] = useState(false);
+  const [attendanceSchedule, setAttendanceSchedule] = useState<Schedule | null>(
+    null
+  );
+  const [attendanceList, setAttendanceList] = useState<ScheduleAttendance[]>([]);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
 
   const loadSchedules = async () => {
     setLoading(true);
@@ -215,6 +227,36 @@ export default function CalendarPage() {
   const openDeleteDialog = (schedule: Schedule) => {
     setDeletingSchedule(schedule);
     setDeleteOpen(true);
+  };
+
+  const openAttendanceDialog = async (schedule: Schedule) => {
+    setAttendanceSchedule(schedule);
+    setAttendanceOpen(true);
+    setAttendanceLoading(true);
+    const { data, error } = await supabase
+      .from("attendance_logs")
+      .select("id,memo,member:members!attendance_logs_member_id_fkey(id,name)")
+      .eq("schedule_id", schedule.id);
+    if (error) {
+      toast.error("출석자 정보를 불러오지 못했습니다.");
+      setAttendanceList([]);
+      setAttendanceLoading(false);
+      return;
+    }
+    const normalized =
+      (data as {
+        id: number;
+        memo: string | null;
+        member: { id: number; name: string } | { id: number; name: string }[] | null;
+      }[] | null) ?? [];
+    setAttendanceList(
+      normalized.map((row) => ({
+        id: row.id,
+        memo: row.memo,
+        member: Array.isArray(row.member) ? row.member[0] ?? null : row.member,
+      }))
+    );
+    setAttendanceLoading(false);
   };
 
   const handleDeleteSchedule = async () => {
@@ -451,6 +493,13 @@ export default function CalendarPage() {
                     일정 삭제
                   </Button>
                 </div>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => openAttendanceDialog(schedule)}
+                >
+                  출석자 리스트 확인하기
+                </Button>
               </CardContent>
             </Card>
           );
@@ -584,6 +633,41 @@ export default function CalendarPage() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={attendanceOpen} onOpenChange={setAttendanceOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              {attendanceSchedule
+                ? `${attendanceSchedule.title} 출석자`
+                : "출석자 리스트"}
+            </DialogTitle>
+          </DialogHeader>
+          {attendanceLoading ? (
+            <div className="text-sm text-muted-foreground">
+              출석자 정보를 불러오는 중...
+            </div>
+          ) : attendanceList.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              출석 기록이 없습니다.
+            </div>
+          ) : (
+            <div className="space-y-2 text-sm">
+              {attendanceList.map((row) => (
+                <div key={row.id} className="rounded-lg border bg-muted/40 p-2">
+                  <div className="font-medium">
+                    {row.member?.name ?? "알 수 없음"}
+                  </div>
+                  {row.memo && (
+                    <div className="text-xs text-muted-foreground">
+                      {row.memo}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
