@@ -43,7 +43,7 @@ export async function GET(request: Request) {
       loginId: data.login_id,
       role: data.role,
       memberId: data.member_id,
-      name: data.member?.name ?? null,
+      name: data.member?.[0]?.name ?? null,
     },
   });
 }

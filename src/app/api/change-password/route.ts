@@ -52,7 +52,7 @@ export async function POST(request: Request) {
   const { error: updateError } = await supabase
     .from("admin_user")
     .update({ password: hashed })
-    .eq("id", adminUserId);
+    .eq("id", data.id);
 
   if (updateError) {
     return NextResponse.json(
