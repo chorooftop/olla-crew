@@ -86,7 +86,7 @@ export default function TopBar() {
   };
 
   return (
-    <div className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/75">
+    <div className="sticky top-0 z-10 border-b bg-muted/60 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-muted/50">
       <div className="mx-auto flex max-w-lg items-center justify-between px-4 py-3">
         <div className="text-sm">
           <span className="font-medium">{adminName}</span>
@@ -94,7 +94,11 @@ export default function TopBar() {
         <div className="flex items-center gap-2">
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" variant="outline">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-muted-foreground hover:text-foreground"
+              >
                 비밀번호 변경
               </Button>
             </DialogTrigger>

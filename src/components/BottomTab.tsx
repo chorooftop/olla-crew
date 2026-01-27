@@ -15,7 +15,7 @@ export default function BottomTab() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-20 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/75">
+    <nav className="fixed bottom-0 left-0 right-0 z-20 border-t bg-muted/60 shadow-[0_-4px_12px_rgba(0,0,0,0.05)] backdrop-blur supports-[backdrop-filter]:bg-muted/50">
       <div className="mx-auto flex max-w-lg items-center justify-around px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
         {tabs.map(({ href, label, icon: Icon }) => {
           const active = pathname === href;

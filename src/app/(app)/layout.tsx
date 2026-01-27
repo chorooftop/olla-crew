@@ -11,7 +11,11 @@ export default function AppLayout({
     <AuthGuard>
       <div className="min-h-screen bg-background pb-20">
         <TopBar />
-        <main className="mx-auto w-full max-w-lg px-4 py-6">{children}</main>
+        <main className="mx-auto w-full max-w-lg px-4 py-6">
+          <div className="rounded-xl bg-background/80 shadow-sm ring-1 ring-border/40">
+            {children}
+          </div>
+        </main>
         <BottomTab />
       </div>
     </AuthGuard>

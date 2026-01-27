@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { toast } from "sonner";
 import { setAuthInfo, setAuthToken } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import ollaIcon from "@/app/olla-icon.jpeg";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -71,15 +73,30 @@ export default function LoginPage() {
             </div>
             <div className="flex items-center gap-2 text-sm font-medium tracking-wide text-white/80">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white/80" />
-              로그인 처리 중...
+              로그인 중...
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white/80" />
             </div>
           </div>
         </div>
       )}
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-center text-xl">Olla Crew</CardTitle>
+      <Card className="w-full max-w-sm overflow-hidden border bg-background/80 shadow-xl">
+        <CardHeader className="space-y-3 pb-4">
+          <div className="relative flex justify-center">
+            <div className="absolute -top-10 h-24 w-24 rounded-full bg-primary/15 blur-2xl" />
+            <Image
+              src={ollaIcon}
+              alt="Olla Crew"
+              width={200}
+              height={200}
+              className="rounded-2xl border shadow-md"
+              priority
+            />
+          </div>
+          <div className="text-center">
+            <div className="text-xs font-medium uppercase tracking-[0.3em] text-muted-foreground">
+              OLLA CREW
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit}>
@@ -121,4 +138,3 @@ export default function LoginPage() {
     </div>
   );
 }
-

@@ -3,15 +3,11 @@
 import { useEffect, useState } from "react";
 import type { ComponentProps } from "react";
 import { toast } from "sonner";
+import { ChevronDown } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { fetchAuthInfo } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -67,14 +63,16 @@ function formatDateTime(value?: string | null) {
       });
 }
 
+function startOfMonth(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth(), 1);
+}
+
 export default function CalendarPage() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [title, setTitle] = useState("");
-  const [type, settype] = useState<string>(
-    CATEGORY_OPTIONS[0].value
-  );
+  const [type, settype] = useState<string>(CATEGORY_OPTIONS[0].value);
   const [scheduledAt, setScheduledAt] = useState("");
   const [city, setCity] = useState("");
   const [location, setLocation] = useState("");
@@ -96,16 +94,24 @@ export default function CalendarPage() {
   const [editManualTitle, setEditManualTitle] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletingSchedule, setDeletingSchedule] = useState<Schedule | null>(
-    null
+    null,
   );
   const [deleting, setDeleting] = useState(false);
   const [attendanceOpen, setAttendanceOpen] = useState(false);
   const [attendanceSchedule, setAttendanceSchedule] = useState<Schedule | null>(
-    null
+    null,
   );
-  const [attendanceList, setAttendanceList] = useState<ScheduleAttendance[]>([]);
+  const [attendanceList, setAttendanceList] = useState<ScheduleAttendance[]>(
+    [],
+  );
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+  const [listFilterOpen, setListFilterOpen] = useState(false);
+  const [listFilter, setListFilter] = useState("UPCOMING");
+  const [listSort, setListSort] = useState("PAST_FIRST");
+  const [calendarBaseMonth, setCalendarBaseMonth] = useState(() =>
+    startOfMonth(new Date()),
+  );
   const [dayDetailOpen, setDayDetailOpen] = useState(false);
   const [dayDetailTitle, setDayDetailTitle] = useState("");
   const [dayDetailSchedules, setDayDetailSchedules] = useState<Schedule[]>([]);
@@ -117,7 +123,7 @@ export default function CalendarPage() {
     const { data, error } = await supabase
       .from("schedules")
       .select(
-        "id,title,type,scheduled_at,city,location,memo,created_by,created_at"
+        "id,title,type,scheduled_at,city,location,memo,created_by,created_at",
       )
       .order("scheduled_at", { ascending: false });
 
@@ -147,8 +153,43 @@ export default function CalendarPage() {
       acc[key].push(schedule);
       return acc;
     },
-    {}
+    {},
   );
+
+  const currentMonth = calendarBaseMonth;
+  const nextMonth = startOfMonth(
+    new Date(
+      calendarBaseMonth.getFullYear(),
+      calendarBaseMonth.getMonth() + 1,
+      1,
+    ),
+  );
+  const prevMonth = startOfMonth(
+    new Date(
+      calendarBaseMonth.getFullYear(),
+      calendarBaseMonth.getMonth() - 1,
+      1,
+    ),
+  );
+  const todayKey = toDateKey(new Date().toISOString());
+  const listSchedules = schedules
+    .filter((schedule) => {
+      if (listFilter === "ALL") return true;
+      const dateKey = toDateKey(schedule.scheduled_at);
+      if (!todayKey || !dateKey) return false;
+      if (listFilter === "PAST") {
+        return dateKey < todayKey;
+      }
+      return dateKey >= todayKey;
+    })
+    .sort((a, b) => {
+      const timeA = new Date(a.scheduled_at).getTime();
+      const timeB = new Date(b.scheduled_at).getTime();
+      if (listSort === "FUTURE_FIRST") {
+        return timeB - timeA;
+      }
+      return timeA - timeB;
+    });
 
   const openDayDetail = (date: Date, daySchedules: Schedule[]) => {
     if (daySchedules.length === 0) return;
@@ -157,7 +198,7 @@ export default function CalendarPage() {
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
-      })
+      }),
     );
     setDayDetailSchedules(daySchedules);
     setDayDetailOpen(true);
@@ -185,7 +226,11 @@ export default function CalendarPage() {
     setManualTitle(false);
   };
 
-  const buildTitle = (typeValue: string, cityValue: string, locationValue: string) => {
+  const buildTitle = (
+    typeValue: string,
+    cityValue: string,
+    locationValue: string,
+  ) => {
     const typeLabel = CATEGORY_LABELS[typeValue] ?? typeValue ?? "일정";
     const cityLabel = cityValue.trim();
     const locationLabel = locationValue.trim();
@@ -285,17 +330,24 @@ export default function CalendarPage() {
       return;
     }
     const normalized =
-      (data as {
-        id: number;
-        memo: string | null;
-        member: { id: number; name: string } | { id: number; name: string }[] | null;
-      }[] | null) ?? [];
+      (data as
+        | {
+            id: number;
+            memo: string | null;
+            member:
+              | { id: number; name: string }
+              | { id: number; name: string }[]
+              | null;
+          }[]
+        | null) ?? [];
     setAttendanceList(
       normalized.map((row) => ({
         id: row.id,
         memo: row.memo,
-        member: Array.isArray(row.member) ? row.member[0] ?? null : row.member,
-      }))
+        member: Array.isArray(row.member)
+          ? (row.member[0] ?? null)
+          : row.member,
+      })),
     );
     setAttendanceLoading(false);
   };
@@ -418,128 +470,140 @@ export default function CalendarPage() {
                 <Button className="h-10">일정 추가</Button>
               </DialogTrigger>
               <DialogContent>
-              <DialogHeader>
-                <DialogTitle>새 일정 등록</DialogTitle>
-              </DialogHeader>
-              <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2 text-sm">
-                <span className="text-muted-foreground">
-                  최신 일정 불러오기
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleLoadLatestSchedule}
-                  disabled={loadingLatest}
-                >
-                  {loadingLatest ? "불러오는 중..." : "불러오기"}
-                </Button>
-              </div>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium" htmlFor="schedule-title">
-                    일정 제목
-                  </label>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <Input
-                      id="schedule-title"
-                      value={title}
-                      onChange={(event) => setTitle(event.target.value)}
-                      placeholder="예: [정모] 강남 - 더클라임"
-                      disabled={!manualTitle}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="sm:w-28"
-                      onClick={() => setManualTitle((prev) => !prev)}
+                <DialogHeader>
+                  <DialogTitle>새 일정 등록</DialogTitle>
+                </DialogHeader>
+                <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+                  <span className="text-muted-foreground">
+                    최신 일정 불러오기
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleLoadLatestSchedule}
+                    disabled={loadingLatest}
+                  >
+                    {loadingLatest ? "불러오는 중..." : "불러오기"}
+                  </Button>
+                </div>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label
+                      className="text-sm font-medium"
+                      htmlFor="schedule-title"
                     >
-                      {manualTitle ? "자동 입력" : "수동 수정"}
-                    </Button>
+                      일정 제목
+                    </label>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <Input
+                        id="schedule-title"
+                        value={title}
+                        onChange={(event) => setTitle(event.target.value)}
+                        placeholder="예: [정모] 강남 - 더클라임"
+                        disabled={!manualTitle}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="sm:w-28"
+                        onClick={() => setManualTitle((prev) => !prev)}
+                      >
+                        {manualTitle ? "자동 입력" : "수동 수정"}
+                      </Button>
+                    </div>
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <label
-                    className="text-sm font-medium"
-                    htmlFor="schedule-type"
+                  <div className="space-y-2">
+                    <label
+                      className="text-sm font-medium"
+                      htmlFor="schedule-type"
+                    >
+                      일정 유형
+                    </label>
+                    <select
+                      id="schedule-type"
+                      className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                      value={type}
+                      onChange={(event) => settype(event.target.value)}
+                    >
+                      {CATEGORY_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label
+                      className="text-sm font-medium"
+                      htmlFor="schedule-time"
+                    >
+                      모임 일시
+                    </label>
+                    <Input
+                      id="schedule-time"
+                      type="datetime-local"
+                      value={scheduledAt}
+                      onChange={(event) => setScheduledAt(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label
+                      className="text-sm font-medium"
+                      htmlFor="schedule-city"
+                    >
+                      장소
+                    </label>
+                    <Input
+                      id="schedule-city"
+                      value={city}
+                      onChange={(event) => setCity(event.target.value)}
+                      placeholder="예: 강남"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label
+                      className="text-sm font-medium"
+                      htmlFor="schedule-location"
+                    >
+                      암장
+                    </label>
+                    <Input
+                      id="schedule-location"
+                      value={location}
+                      onChange={(event) => setLocation(event.target.value)}
+                      placeholder="예: 더클라임"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label
+                      className="text-sm font-medium"
+                      htmlFor="schedule-memo"
+                    >
+                      메모
+                    </label>
+                    <Textarea
+                      id="schedule-memo"
+                      rows={4}
+                      value={memo}
+                      onChange={(event) => setMemo(event.target.value)}
+                      placeholder="공지사항, 준비물 등"
+                    />
+                  </div>
+                  <div className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+                    작성자: {adminName}
+                  </div>
+                  <Button
+                    className="h-12 w-full text-base"
+                    onClick={handleCreateSchedule}
+                    disabled={creating}
                   >
-                    일정 유형
-                  </label>
-                  <select
-                    id="schedule-type"
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                    value={type}
-                    onChange={(event) => settype(event.target.value)}
-                  >
-                    {CATEGORY_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                    {creating ? "등록 중..." : "일정 등록"}
+                  </Button>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium" htmlFor="schedule-time">
-                    모임 일시
-                  </label>
-                  <Input
-                    id="schedule-time"
-                    type="datetime-local"
-                    value={scheduledAt}
-                    onChange={(event) => setScheduledAt(event.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium" htmlFor="schedule-city">
-                    장소
-                  </label>
-                  <Input
-                    id="schedule-city"
-                    value={city}
-                    onChange={(event) => setCity(event.target.value)}
-                    placeholder="예: 강남"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label
-                    className="text-sm font-medium"
-                    htmlFor="schedule-location"
-                  >
-                    암장
-                  </label>
-                  <Input
-                    id="schedule-location"
-                    value={location}
-                    onChange={(event) => setLocation(event.target.value)}
-                    placeholder="예: 더클라임"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium" htmlFor="schedule-memo">
-                    메모
-                  </label>
-                  <Textarea
-                    id="schedule-memo"
-                    rows={4}
-                    value={memo}
-                    onChange={(event) => setMemo(event.target.value)}
-                    placeholder="공지사항, 준비물 등"
-                  />
-                </div>
-                <div className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">
-                  작성자: {adminName}
-                </div>
-                <Button
-                  className="h-12 w-full text-base"
-                  onClick={handleCreateSchedule}
-                  disabled={creating}
-                >
-                  {creating ? "등록 중..." : "일정 등록"}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </div>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
       </header>
 
@@ -562,58 +626,134 @@ export default function CalendarPage() {
       )}
 
       {viewMode === "calendar" ? (
-        <div className="rounded-lg border bg-card p-4">
-          <Calendar
-            mode="single"
-            selected={undefined}
-            className="w-full"
-            classNames={{ months: "w-full", month: "w-full" }}
-            components={{
-              DayButton: (props: DayButtonProps) => {
-                const date = props.day.date;
-                const offset = date.getTimezoneOffset() * 60000;
-                const key = new Date(date.getTime() - offset)
-                  .toISOString()
-                  .slice(0, 10);
-                const daySchedules = schedulesByDate[key] ?? [];
-                const visible = daySchedules.slice(0, 2);
-                const extra = daySchedules.length - visible.length;
+        <div className="space-y-3">
+          {[currentMonth, nextMonth, prevMonth].map((month, index) => (
+            <div
+              key={month.toISOString()}
+              className="rounded-lg border bg-card p-3 sm:p-4"
+            >
+              <Calendar
+                mode="single"
+                selected={undefined}
+                month={month}
+                onMonthChange={(date) => {
+                  if (index !== 0) return;
+                  setCalendarBaseMonth(startOfMonth(date));
+                }}
+                hideNavigation={index !== 0}
+                className="w-full max-w-full [--cell-size:--spacing(6)] sm:[--cell-size:--spacing(8)]"
+                classNames={{
+                  root: "w-full max-w-full",
+                  months: "w-full flex flex-col gap-4",
+                  month: "w-full",
+                  weekdays: "flex",
+                  weekday:
+                    "text-muted-foreground rounded-md flex-1 font-normal text-[0.7rem] select-none",
+                }}
+                formatters={{
+                  formatCaption: (date) =>
+                    `${date.getFullYear()}년 ${date.getMonth() + 1}월`,
+                  formatWeekdayName: (date) =>
+                    date.toLocaleString("ko-KR", { weekday: "short" }),
+                }}
+                components={{
+                  DayButton: (props: DayButtonProps) => {
+                    const date = props.day.date;
+                    const offset = date.getTimezoneOffset() * 60000;
+                    const key = new Date(date.getTime() - offset)
+                      .toISOString()
+                      .slice(0, 10);
+                    const daySchedules = schedulesByDate[key] ?? [];
+                    const visible = daySchedules.slice(0, 2);
+                    const extra = daySchedules.length - visible.length;
 
-                return (
-                  <CalendarDayButton
-                    {...props}
-                    onClick={() => openDayDetail(date, daySchedules)}
-                  >
-                    <div className="flex h-full w-full flex-col items-start gap-1 p-1 text-left">
-                      <span className="text-xs font-medium">
-                        {date.getDate()}
-                      </span>
-                      {visible.map((schedule) => (
-                        <span
-                          key={schedule.id}
-                          className="w-full truncate text-[10px] text-muted-foreground"
-                        >
-                          {schedule.title}
-                        </span>
-                      ))}
-                      {extra > 0 && (
-                        <span className="text-[10px] text-muted-foreground">
-                          +{extra}개
-                        </span>
-                      )}
-                    </div>
-                  </CalendarDayButton>
-                );
-              },
-            }}
-          />
+                    return (
+                      <CalendarDayButton
+                        {...props}
+                        onClick={() => openDayDetail(date, daySchedules)}
+                      >
+                        <div className="flex h-full w-full flex-col items-start gap-2 p-1 text-left sm:gap-1 sm:p-2">
+                          <span className="text-[10px] font-medium sm:text-xs">
+                            {date.getDate()}
+                          </span>
+                          {visible.map((schedule) => (
+                            <span
+                              key={schedule.id}
+                              className="w-full truncate text-[9px] text-muted-foreground sm:text-[10px]"
+                            >
+                              {schedule.title.slice(0, 9)}...
+                            </span>
+                          ))}
+                          {extra > 0 && (
+                            <span className="text-[9px] text-muted-foreground sm:text-[10px]">
+                              +{extra}개
+                            </span>
+                          )}
+                        </div>
+                      </CalendarDayButton>
+                    );
+                  },
+                }}
+              />
+            </div>
+          ))}
         </div>
       ) : (
         <div className="space-y-4">
-          {schedules.map((schedule) => {
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-muted-foreground">필터/정렬</div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setListFilterOpen((prev) => !prev)}
+                className="h-8 gap-1 px-2 text-xs text-muted-foreground"
+              >
+                {listFilterOpen ? "닫기" : "펼치기"}
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${
+                    listFilterOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </Button>
+            </div>
+            <div
+              className={`grid overflow-hidden transition-[grid-template-rows,opacity] duration-200 ease-out ${
+                listFilterOpen
+                  ? "grid-rows-[1fr] opacity-100"
+                  : "grid-rows-[0fr] opacity-0"
+              }`}
+              aria-hidden={!listFilterOpen}
+            >
+              <div className="min-h-0">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <select
+                    className="w-full rounded-md border bg-background px-3 py-2 text-sm sm:w-[160px]"
+                    value={listFilter}
+                    onChange={(event) => setListFilter(event.target.value)}
+                  >
+                    <option value="UPCOMING">오늘 이후</option>
+                    <option value="PAST">지난 일정</option>
+                    <option value="ALL">전체</option>
+                  </select>
+                  <select
+                    className="w-full rounded-md border bg-background px-3 py-2 text-sm sm:w-[160px]"
+                    value={listSort}
+                    onChange={(event) => setListSort(event.target.value)}
+                  >
+                    <option value="PAST_FIRST">과거 순</option>
+                    <option value="FUTURE_FIRST">미래 순</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+          {listSchedules.map((schedule) => {
             const categoryLabel =
               CATEGORY_OPTIONS.find((option) => option.value === schedule.type)
-                ?.label ?? schedule.type ?? "미분류";
+                ?.label ??
+              schedule.type ??
+              "미분류";
             return (
               <Card key={schedule.id}>
                 <CardHeader>
@@ -629,7 +769,9 @@ export default function CalendarPage() {
                   {schedule.memo && (
                     <div className="rounded-lg border bg-muted/40 p-3 text-sm">
                       <div className="text-xs text-muted-foreground">메모</div>
-                      <p className="mt-1 whitespace-pre-line">{schedule.memo}</p>
+                      <p className="mt-1 whitespace-pre-line">
+                        {schedule.memo}
+                      </p>
                     </div>
                   )}
                   <div className="grid grid-cols-1 gap-2 pt-2 sm:grid-cols-2">
@@ -852,4 +994,3 @@ export default function CalendarPage() {
     </div>
   );
 }
-
