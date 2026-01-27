@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { fetchAuthInfo, getAuthToken } from "@/lib/auth";
+import { clearAuthed, fetchAuthInfo, getAuthToken } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 
 export default function TopBar() {
+  const router = useRouter();
   const [adminName, setAdminName] = useState<string>("관리자");
   const [open, setOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -77,52 +79,62 @@ export default function TopBar() {
     }
   };
 
+  const handleLogout = () => {
+    clearAuthed();
+    toast.success("로그아웃되었습니다.");
+    router.replace("/login");
+  };
+
   return (
     <div className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/75">
       <div className="mx-auto flex max-w-lg items-center justify-between px-4 py-3">
         <div className="text-sm">
-          <span className="text-muted-foreground">로그인: </span>
           <span className="font-medium">{adminName}</span>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm" variant="outline">
-              비밀번호 변경
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>비밀번호 변경</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-3">
-              <Input
-                type="password"
-                placeholder="현재 비밀번호"
-                value={currentPassword}
-                onChange={(event) => setCurrentPassword(event.target.value)}
-              />
-              <Input
-                type="password"
-                placeholder="새 비밀번호"
-                value={nextPassword}
-                onChange={(event) => setNextPassword(event.target.value)}
-              />
-              <Input
-                type="password"
-                placeholder="새 비밀번호 확인"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-              />
-              <Button
-                className="h-11 w-full"
-                onClick={handleChangePassword}
-                disabled={saving}
-              >
-                {saving ? "변경 중..." : "변경하기"}
+        <div className="flex items-center gap-2">
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" variant="outline">
+                비밀번호 변경
               </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>비밀번호 변경</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <Input
+                  type="password"
+                  placeholder="현재 비밀번호"
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                />
+                <Input
+                  type="password"
+                  placeholder="새 비밀번호"
+                  value={nextPassword}
+                  onChange={(event) => setNextPassword(event.target.value)}
+                />
+                <Input
+                  type="password"
+                  placeholder="새 비밀번호 확인"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                />
+                <Button
+                  className="h-11 w-full"
+                  onClick={handleChangePassword}
+                  disabled={saving}
+                >
+                  {saving ? "변경 중..." : "변경하기"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+          <Button size="sm" variant="ghost" onClick={handleLogout}>
+            로그아웃
+          </Button>
+        </div>
       </div>
     </div>
   );

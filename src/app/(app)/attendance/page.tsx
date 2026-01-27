@@ -17,7 +17,10 @@ import {
 type Member = {
   id: number;
   name: string;
+  withdrawn_at: string | null;
 };
+
+type SelectedMember = Pick<Member, "id" | "name">;
 
 type Schedule = {
   id: number;
@@ -59,7 +62,9 @@ export default function AttendancePage() {
     null
   );
   const [open, setOpen] = useState(false);
-  const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+  const [selectedMember, setSelectedMember] = useState<SelectedMember | null>(
+    null
+  );
   const [memo, setMemo] = useState("");
   const [saving, setSaving] = useState(false);
   const [adminName, setAdminName] = useState<string>("관리자");
@@ -90,7 +95,7 @@ export default function AttendancePage() {
       setLoading(true);
       const { data, error } = await supabase
         .from("members")
-        .select("id,name")
+        .select("id,name,withdrawn_at")
         .order("name");
 
       if (error) {
@@ -110,15 +115,16 @@ export default function AttendancePage() {
     const loadSchedules = async () => {
       const now = new Date();
       const start = new Date(now);
-      start.setDate(start.getDate() - 30);
-      const end = new Date(now);
-      end.setDate(end.getDate() + 90);
+      start.setDate(start.getDate() - 3);
+      const startOfToday = new Date(now);
+      startOfToday.setHours(0, 0, 0, 0);
+      const endOfToday = new Date(now);
+      endOfToday.setHours(23, 59, 59, 999);
 
       const { data, error } = await supabase
         .from("schedules")
         .select("id,title,type,scheduled_at,location")
         .gte("scheduled_at", start.toISOString())
-        .lte("scheduled_at", end.toISOString())
         .order("scheduled_at", { ascending: true });
 
       if (error) {
@@ -128,15 +134,27 @@ export default function AttendancePage() {
         return;
       }
 
-      const nowTime = now.getTime();
-      const items = (data as Schedule[]).sort((a, b) => {
-        const diffA = Math.abs(new Date(a.scheduled_at).getTime() - nowTime);
-        const diffB = Math.abs(new Date(b.scheduled_at).getTime() - nowTime);
-        if (diffA !== diffB) return diffA - diffB;
-        return new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
+      const items = (data as Schedule[]).sort(
+        (a, b) =>
+          new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()
+      );
+      const todaySchedules = items.filter((schedule) => {
+        const time = new Date(schedule.scheduled_at).getTime();
+        return time >= startOfToday.getTime() && time <= endOfToday.getTime();
       });
+      const pastSchedules = items
+        .filter((schedule) => new Date(schedule.scheduled_at).getTime() < startOfToday.getTime())
+        .sort(
+          (a, b) =>
+            new Date(b.scheduled_at).getTime() - new Date(a.scheduled_at).getTime()
+        );
+      const futureSchedules = items.filter(
+        (schedule) => new Date(schedule.scheduled_at).getTime() > endOfToday.getTime()
+      );
+      const selectedSchedule =
+        todaySchedules[0] ?? pastSchedules[0] ?? futureSchedules[0] ?? null;
       setSchedules(items);
-      setSelectedScheduleId(items[0]?.id ?? null);
+      setSelectedScheduleId(selectedSchedule?.id ?? null);
     };
 
     void loadSchedules();
@@ -234,8 +252,10 @@ export default function AttendancePage() {
 
   const filteredMembers = useMemo(() => {
     const keyword = query.trim().toLowerCase();
-    if (!keyword) return members;
-    return members.filter((member) =>
+    // 탈퇴자 제외
+    const activeMembers = members.filter((member) => !member?.withdrawn_at);
+    if (!keyword) return activeMembers;
+    return activeMembers.filter((member) =>
       member.name.toLowerCase().includes(keyword)
     );
   }, [members, query]);
@@ -376,9 +396,6 @@ export default function AttendancePage() {
     <div className="space-y-4">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">출석 체크</h1>
-        <p className="text-sm text-muted-foreground">
-          멤버를 검색하고 출석을 등록하세요.
-        </p>
       </header>
 
       <div className="space-y-3">
@@ -428,8 +445,14 @@ export default function AttendancePage() {
       </div>
 
       {loading && (
-        <div className="rounded-lg border bg-card p-6 text-center text-sm text-muted-foreground">
-          멤버 정보를 불러오는 중...
+        <div className="rounded-lg border bg-card p-6">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 animate-spin rounded-full border-2 border-muted-foreground/20 border-t-primary" />
+            <div className="space-y-2">
+              <div className="h-3 w-44 animate-pulse rounded-full bg-muted/60" />
+              <div className="h-2 w-28 animate-pulse rounded-full bg-muted/40" />
+            </div>
+          </div>
         </div>
       )}
 

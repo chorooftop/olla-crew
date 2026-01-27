@@ -13,6 +13,7 @@ export default function LoginPage() {
   const [id, setId] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [transitioning, setTransitioning] = useState(false);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -43,8 +44,10 @@ export default function LoginPage() {
         role: data.adminUser.role,
         name: data.adminUser.name ?? null,
       });
-      toast.success("로그인 완료!");
-      router.replace("/attendance");
+      setTransitioning(true);
+      setTimeout(() => {
+        router.replace("/attendance");
+      }, 600);
     } catch (error) {
       console.error(error);
       toast.error("로그인 중 오류가 발생했습니다.");
@@ -55,6 +58,25 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
+      {transitioning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black/95 backdrop-blur">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_45%)]" />
+          <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-white/10 to-transparent" />
+          <div className="absolute -left-24 top-10 h-72 w-72 animate-pulse rounded-full bg-white/10 blur-3xl" />
+          <div className="absolute -right-24 bottom-10 h-72 w-72 animate-pulse rounded-full bg-white/10 blur-3xl" />
+          <div className="relative flex flex-col items-center gap-4 text-white">
+            <div className="relative">
+              <div className="h-16 w-16 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+              <div className="absolute inset-0 rounded-full border border-white/10" />
+            </div>
+            <div className="flex items-center gap-2 text-sm font-medium tracking-wide text-white/80">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white/80" />
+              로그인 처리 중...
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white/80" />
+            </div>
+          </div>
+        </div>
+      )}
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle className="text-center text-xl">Olla Crew</CardTitle>

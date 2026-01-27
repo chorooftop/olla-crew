@@ -54,6 +54,12 @@ export async function POST(request: Request) {
     );
   }
 
+  const member = (data as { member?: { name?: string } | { name?: string }[] })
+    .member;
+  const memberName = Array.isArray(member)
+    ? member[0]?.name ?? null
+    : member?.name ?? null;
+
   return NextResponse.json({
     ok: true,
     token,
@@ -62,7 +68,7 @@ export async function POST(request: Request) {
       loginId: data.login_id,
       role: data.role,
       memberId: data.member_id,
-      name: data.member?.[0]?.name ?? null,
+      name: memberName,
     },
   });
 }

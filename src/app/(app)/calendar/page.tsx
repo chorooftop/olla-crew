@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { ComponentProps } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { fetchAuthInfo } from "@/lib/auth";
@@ -20,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Calendar, CalendarDayButton } from "@/components/ui/calendar";
 
 type Schedule = {
   id: number;
@@ -78,6 +80,7 @@ export default function CalendarPage() {
   const [location, setLocation] = useState("");
   const [memo, setMemo] = useState("");
   const [creating, setCreating] = useState(false);
+  const [loadingLatest, setLoadingLatest] = useState(false);
   const [adminName, setAdminName] = useState<string>("관리자");
   const [adminMemberId, setAdminMemberId] = useState<number | null>(null);
   const [manualTitle, setManualTitle] = useState(false);
@@ -102,6 +105,12 @@ export default function CalendarPage() {
   );
   const [attendanceList, setAttendanceList] = useState<ScheduleAttendance[]>([]);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+  const [dayDetailOpen, setDayDetailOpen] = useState(false);
+  const [dayDetailTitle, setDayDetailTitle] = useState("");
+  const [dayDetailSchedules, setDayDetailSchedules] = useState<Schedule[]>([]);
+
+  type DayButtonProps = ComponentProps<typeof CalendarDayButton>;
 
   const loadSchedules = async () => {
     setLoading(true);
@@ -120,6 +129,38 @@ export default function CalendarPage() {
 
     setSchedules(data as Schedule[]);
     setLoading(false);
+  };
+
+  const toDateKey = (value?: string | null) => {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    const offset = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+  };
+
+  const schedulesByDate = schedules.reduce<Record<string, Schedule[]>>(
+    (acc, schedule) => {
+      const key = toDateKey(schedule.scheduled_at);
+      if (!key) return acc;
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(schedule);
+      return acc;
+    },
+    {}
+  );
+
+  const openDayDetail = (date: Date, daySchedules: Schedule[]) => {
+    if (daySchedules.length === 0) return;
+    setDayDetailTitle(
+      date.toLocaleDateString("ko-KR", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      })
+    );
+    setDayDetailSchedules(daySchedules);
+    setDayDetailOpen(true);
   };
 
   useEffect(() => {
@@ -317,24 +358,83 @@ export default function CalendarPage() {
     void loadSchedules();
   };
 
+  const handleLoadLatestSchedule = async () => {
+    setLoadingLatest(true);
+    const { data, error } = await supabase
+      .from("schedules")
+      .select("title,type,city,location,memo")
+      .eq("type", type)
+      .order("scheduled_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      toast.error("최신 일정을 불러오지 못했습니다.");
+      setLoadingLatest(false);
+      return;
+    }
+    if (!data) {
+      toast.message("해당 유형의 일정이 없습니다.");
+      setLoadingLatest(false);
+      return;
+    }
+
+    setTitle(data.title ?? "");
+    setCity(data.city ?? "");
+    setLocation(data.location ?? "");
+    setMemo(data.memo ?? "");
+    setManualTitle(false);
+    setLoadingLatest(false);
+  };
+
   return (
     <div className="space-y-4">
       <header className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold">모임 일정 관리</h1>
-            <p className="text-sm text-muted-foreground">
-              정모/벙 일정을 등록하고 관리하세요.
-            </p>
           </div>
-          <Dialog open={addOpen} onOpenChange={setAddOpen}>
-            <DialogTrigger asChild>
-              <Button className="h-10">일정 추가</Button>
-            </DialogTrigger>
-            <DialogContent>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex overflow-hidden rounded-md border">
+              <Button
+                variant={viewMode === "list" ? "default" : "ghost"}
+                size="sm"
+                className="rounded-none"
+                onClick={() => setViewMode("list")}
+              >
+                리스트
+              </Button>
+              <Button
+                variant={viewMode === "calendar" ? "default" : "ghost"}
+                size="sm"
+                className="rounded-none"
+                onClick={() => setViewMode("calendar")}
+              >
+                캘린더
+              </Button>
+            </div>
+            <Dialog open={addOpen} onOpenChange={setAddOpen}>
+              <DialogTrigger asChild>
+                <Button className="h-10">일정 추가</Button>
+              </DialogTrigger>
+              <DialogContent>
               <DialogHeader>
                 <DialogTitle>새 일정 등록</DialogTitle>
               </DialogHeader>
+              <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+                <span className="text-muted-foreground">
+                  최신 일정 불러오기
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleLoadLatestSchedule}
+                  disabled={loadingLatest}
+                >
+                  {loadingLatest ? "불러오는 중..." : "불러오기"}
+                </Button>
+              </div>
               <div className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium" htmlFor="schedule-title">
@@ -440,11 +540,18 @@ export default function CalendarPage() {
             </DialogContent>
           </Dialog>
         </div>
+        </div>
       </header>
 
       {loading && (
-        <div className="rounded-lg border bg-card p-6 text-center text-sm text-muted-foreground">
-          일정을 불러오는 중...
+        <div className="rounded-lg border bg-card p-6">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 animate-spin rounded-full border-2 border-muted-foreground/20 border-t-primary" />
+            <div className="space-y-2">
+              <div className="h-3 w-44 animate-pulse rounded-full bg-muted/60" />
+              <div className="h-2 w-28 animate-pulse rounded-full bg-muted/40" />
+            </div>
+          </div>
         </div>
       )}
 
@@ -454,57 +561,129 @@ export default function CalendarPage() {
         </div>
       )}
 
-      <div className="space-y-4">
-        {schedules.map((schedule) => {
-          const categoryLabel =
-            CATEGORY_OPTIONS.find((option) => option.value === schedule.type)
-              ?.label ?? schedule.type ?? "미분류";
-          return (
-            <Card key={schedule.id}>
-              <CardHeader>
-                <CardTitle className="text-lg">{schedule.title}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div className="text-xs text-muted-foreground">
-                  유형: {categoryLabel}
-                </div>
-                <div>일시: {formatDateTime(schedule.scheduled_at)}</div>
-                {schedule.city && <div>장소: {schedule.city}</div>}
-                {schedule.location && <div>암장: {schedule.location}</div>}
-                {schedule.memo && (
-                  <div className="rounded-lg border bg-muted/40 p-3 text-sm">
-                    <div className="text-xs text-muted-foreground">메모</div>
-                    <p className="mt-1 whitespace-pre-line">{schedule.memo}</p>
+      {viewMode === "calendar" ? (
+        <div className="rounded-lg border bg-card p-4">
+          <Calendar
+            mode="single"
+            selected={undefined}
+            className="w-full"
+            classNames={{ months: "w-full", month: "w-full" }}
+            components={{
+              DayButton: (props: DayButtonProps) => {
+                const date = props.day.date;
+                const offset = date.getTimezoneOffset() * 60000;
+                const key = new Date(date.getTime() - offset)
+                  .toISOString()
+                  .slice(0, 10);
+                const daySchedules = schedulesByDate[key] ?? [];
+                const visible = daySchedules.slice(0, 2);
+                const extra = daySchedules.length - visible.length;
+
+                return (
+                  <CalendarDayButton
+                    {...props}
+                    onClick={() => openDayDetail(date, daySchedules)}
+                  >
+                    <div className="flex h-full w-full flex-col items-start gap-1 p-1 text-left">
+                      <span className="text-xs font-medium">
+                        {date.getDate()}
+                      </span>
+                      {visible.map((schedule) => (
+                        <span
+                          key={schedule.id}
+                          className="w-full truncate text-[10px] text-muted-foreground"
+                        >
+                          {schedule.title}
+                        </span>
+                      ))}
+                      {extra > 0 && (
+                        <span className="text-[10px] text-muted-foreground">
+                          +{extra}개
+                        </span>
+                      )}
+                    </div>
+                  </CalendarDayButton>
+                );
+              },
+            }}
+          />
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {schedules.map((schedule) => {
+            const categoryLabel =
+              CATEGORY_OPTIONS.find((option) => option.value === schedule.type)
+                ?.label ?? schedule.type ?? "미분류";
+            return (
+              <Card key={schedule.id}>
+                <CardHeader>
+                  <CardTitle className="text-lg">{schedule.title}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <div className="text-xs text-muted-foreground">
+                    유형: {categoryLabel}
                   </div>
-                )}
-                <div className="grid grid-cols-1 gap-2 pt-2 sm:grid-cols-2">
+                  <div>일시: {formatDateTime(schedule.scheduled_at)}</div>
+                  {schedule.city && <div>장소: {schedule.city}</div>}
+                  {schedule.location && <div>암장: {schedule.location}</div>}
+                  {schedule.memo && (
+                    <div className="rounded-lg border bg-muted/40 p-3 text-sm">
+                      <div className="text-xs text-muted-foreground">메모</div>
+                      <p className="mt-1 whitespace-pre-line">{schedule.memo}</p>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 gap-2 pt-2 sm:grid-cols-2">
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => openEditDialog(schedule)}
+                    >
+                      일정 수정
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      className="w-full"
+                      onClick={() => openDeleteDialog(schedule)}
+                    >
+                      일정 삭제
+                    </Button>
+                  </div>
                   <Button
                     variant="outline"
                     className="w-full"
-                    onClick={() => openEditDialog(schedule)}
+                    onClick={() => openAttendanceDialog(schedule)}
                   >
-                    일정 수정
+                    출석자 리스트 확인하기
                   </Button>
-                  <Button
-                    variant="destructive"
-                    className="w-full"
-                    onClick={() => openDeleteDialog(schedule)}
-                  >
-                    일정 삭제
-                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+      <Dialog open={dayDetailOpen} onOpenChange={setDayDetailOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{dayDetailTitle}</DialogTitle>
+          </DialogHeader>
+          {dayDetailSchedules.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              등록된 일정이 없습니다.
+            </div>
+          ) : (
+            <div className="space-y-3 text-sm">
+              {dayDetailSchedules.map((schedule) => (
+                <div key={schedule.id} className="rounded-lg border p-3">
+                  <div className="font-medium">{schedule.title}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {formatDateTime(schedule.scheduled_at)}
+                  </div>
                 </div>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => openAttendanceDialog(schedule)}
-                >
-                  출석자 리스트 확인하기
-                </Button>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>
           <DialogHeader>
