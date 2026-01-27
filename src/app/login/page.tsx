@@ -44,7 +44,7 @@ export default function LoginPage() {
         name: data.adminUser.name ?? null,
       });
       toast.success("로그인 완료!");
-      router.replace("/members");
+      router.replace("/attendance");
     } catch (error) {
       console.error(error);
       toast.error("로그인 중 오류가 발생했습니다.");

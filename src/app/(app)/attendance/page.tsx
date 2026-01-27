@@ -240,56 +240,12 @@ export default function AttendancePage() {
     );
   }, [members, query]);
 
-  const openDialog = (member: Member) => {
-    setSelectedMember(member);
-    setMemo("");
-    setOpen(true);
-  };
-
-  const handleSubmit = async () => {
-    if (!selectedMember) return;
+  const refreshAttendance = async () => {
     if (!selectedScheduleId) {
-      toast.error("먼저 출석을 등록할 일정을 선택해 주세요.");
+      setAttendanceMap({});
+      setAttendanceCount(0);
       return;
     }
-    if (!adminMemberId) {
-      toast.error("로그인 정보를 확인할 수 없습니다.");
-      return;
-    }
-    setSaving(true);
-    const existingLogId = attendanceMap[selectedMember.id];
-
-    if (existingLogId) {
-      const { error } = await supabase
-        .from("attendance_logs")
-        .delete()
-        .eq("id", existingLogId);
-      if (error) {
-        toast.error("출석 해제에 실패했습니다.");
-        setSaving(false);
-        return;
-      }
-      toast.success(`${selectedMember.name} 출석 해제 완료!`);
-    } else {
-      const payload = {
-        member_id: selectedMember.id,
-        checked_by: adminMemberId,
-        schedule_id: selectedScheduleId,
-        memo: memo.trim() || null,
-      };
-
-      const { error } = await supabase.from("attendance_logs").insert(payload);
-      if (error) {
-        toast.error("출석 체크에 실패했습니다.");
-        setSaving(false);
-        return;
-      }
-      toast.success(`${selectedMember.name} 출석 완료!`);
-    }
-
-    setSaving(false);
-    setOpen(false);
-    setMemo("");
     const { data } = await supabase
       .from("attendance_logs")
       .select("id,member_id")
@@ -300,6 +256,120 @@ export default function AttendancePage() {
     });
     setAttendanceMap(map);
     setAttendanceCount(data?.length ?? 0);
+  };
+
+  const openMemoDialog = async (member: Member) => {
+    const logId = attendanceMap[member.id];
+    if (!logId) {
+      toast.error("출석 기록이 없습니다.");
+      return;
+    }
+    setSelectedMember(member);
+    setMemo("");
+    setOpen(true);
+    setSaving(true);
+    const { data, error } = await supabase
+      .from("attendance_logs")
+      .select("memo")
+      .eq("id", logId)
+      .single();
+    if (error) {
+      toast.error("메모 정보를 불러오지 못했습니다.");
+    } else {
+      setMemo((data?.memo as string | null) ?? "");
+    }
+    setSaving(false);
+  };
+
+  const openMemoDialogForLog = async (
+    member: { id: number; name: string },
+    logId: number
+  ) => {
+    setSelectedMember(member);
+    setMemo("");
+    setOpen(true);
+    setSaving(true);
+    const { data, error } = await supabase
+      .from("attendance_logs")
+      .select("memo")
+      .eq("id", logId)
+      .single();
+    if (error) {
+      toast.error("메모 정보를 불러오지 못했습니다.");
+    } else {
+      setMemo((data?.memo as string | null) ?? "");
+    }
+    setSaving(false);
+  };
+
+  const handleCheckAttendance = async (member: Member) => {
+    if (!selectedScheduleId) {
+      toast.error("먼저 출석을 등록할 일정을 선택해 주세요.");
+      return;
+    }
+    if (!adminMemberId) {
+      toast.error("로그인 정보를 확인할 수 없습니다.");
+      return;
+    }
+    if (attendanceMap[member.id]) {
+      toast.message("이미 출석 처리된 멤버입니다.");
+      return;
+    }
+    setSaving(true);
+    const payload = {
+      member_id: member.id,
+      checked_by: adminMemberId,
+      schedule_id: selectedScheduleId,
+      memo: null,
+    };
+
+    const { error } = await supabase.from("attendance_logs").insert(payload);
+    if (error) {
+      toast.error("출석 체크에 실패했습니다.");
+      setSaving(false);
+      return;
+    }
+    toast.success(`${member.name} 출석 완료!`);
+
+    setSaving(false);
+    await refreshAttendance();
+  };
+
+  const handleRemoveAttendanceForMember = async (member: Member) => {
+    const logId = attendanceMap[member.id];
+    if (!logId) return;
+    const { error } = await supabase
+      .from("attendance_logs")
+      .delete()
+      .eq("id", logId);
+    if (error) {
+      toast.error("출석 해제에 실패했습니다.");
+      return;
+    }
+    toast.success(`${member.name} 출석 해제 완료!`);
+    await refreshAttendance();
+  };
+
+  const handleMemoSave = async () => {
+    if (!selectedMember) return;
+    const logId = attendanceMap[selectedMember.id];
+    if (!logId) {
+      toast.error("출석 기록이 없습니다.");
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase
+      .from("attendance_logs")
+      .update({ memo: memo.trim() || null })
+      .eq("id", logId);
+    if (error) {
+      toast.error("메모 저장에 실패했습니다.");
+      setSaving(false);
+      return;
+    }
+    toast.success("메모 저장 완료!");
+    setSaving(false);
+    setOpen(false);
   };
 
   return (
@@ -373,20 +443,38 @@ export default function AttendancePage() {
         {filteredMembers.map((member) => {
           const attended = Boolean(attendanceMap[member.id]);
           return (
-          <div
-            key={member.id}
-            className="flex items-center justify-between rounded-lg border bg-card p-4"
-          >
-            <div className="text-sm font-medium">{member.name}</div>
-            <Button
-              className="h-12 px-6 text-base"
-              onClick={() => openDialog(member)}
-              variant={attended ? "secondary" : "default"}
+            <div
+              key={member.id}
+              className="flex items-center justify-between rounded-lg border bg-card p-4"
             >
-              {attended ? "출석 해제" : "출석하기"}
-            </Button>
-          </div>
-        );
+              <div className="text-sm font-medium">{member.name}</div>
+              {attended ? (
+                <div className="flex gap-2">
+                  <Button
+                    className="h-12 px-5 text-base"
+                    variant="secondary"
+                    onClick={() => handleRemoveAttendanceForMember(member)}
+                  >
+                    출석 해제
+                  </Button>
+                  <Button
+                    className="h-12 px-5 text-base"
+                    variant="outline"
+                    onClick={() => openMemoDialog(member)}
+                  >
+                    메모
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  className="h-12 px-6 text-base"
+                  onClick={() => handleCheckAttendance(member)}
+                >
+                  출석하기
+                </Button>
+              )}
+            </div>
+          );
         })}
       </div>
 
@@ -394,7 +482,7 @@ export default function AttendancePage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {selectedMember ? `${selectedMember.name} 출석 체크` : "출석 체크"}
+              {selectedMember ? `${selectedMember.name} 메모` : "메모"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
@@ -409,14 +497,10 @@ export default function AttendancePage() {
             </div>
             <Button
               className="h-12 w-full text-base"
-              onClick={handleSubmit}
+              onClick={handleMemoSave}
               disabled={saving}
             >
-              {saving
-                ? "처리 중..."
-                : attendanceMap[selectedMember?.id ?? 0]
-                ? "출석 해제하기"
-                : "출석하기"}
+              {saving ? "처리 중..." : "저장하기"}
             </Button>
           </div>
         </DialogContent>
@@ -444,13 +528,29 @@ export default function AttendancePage() {
                   <div className="font-medium">
                     {row.member?.name ?? "알 수 없음"}
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleRemoveAttendance(row.id)}
-                  >
-                    출석 해제
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleRemoveAttendance(row.id)}
+                    >
+                      출석 해제
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        row.member &&
+                        openMemoDialogForLog(
+                          { id: row.member.id, name: row.member.name },
+                          row.id
+                        )
+                      }
+                      disabled={!row.member}
+                    >
+                      메모
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
