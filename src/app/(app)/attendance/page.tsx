@@ -43,13 +43,16 @@ const CATEGORY_LABELS: Record<string, string> = {
 function formatScheduleLabel(schedule: Schedule) {
   const date = new Date(schedule.scheduled_at);
   const dateLabel = Number.isNaN(date.getTime())
-    ? schedule.scheduled_at
-    : date.toLocaleString("ko-KR", {
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+    ? `${schedule.scheduled_at}`
+    : `(${date.toLocaleString("ko-KR", { weekday: "short" })}) ${date.toLocaleString(
+        "ko-KR",
+        {
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        },
+      )}`;
   return `${schedule.title} / ${dateLabel}`;
 }
 
@@ -59,18 +62,18 @@ export default function AttendancePage() {
   const [query, setQuery] = useState("");
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [selectedScheduleId, setSelectedScheduleId] = useState<number | null>(
-    null
+    null,
   );
   const [open, setOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<SelectedMember | null>(
-    null
+    null,
   );
   const [memo, setMemo] = useState("");
   const [saving, setSaving] = useState(false);
   const [adminName, setAdminName] = useState<string>("관리자");
   const [adminMemberId, setAdminMemberId] = useState<number | null>(null);
   const [attendanceMap, setAttendanceMap] = useState<Record<number, number>>(
-    {}
+    {},
   );
   const [attendanceCount, setAttendanceCount] = useState(0);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
@@ -136,20 +139,26 @@ export default function AttendancePage() {
 
       const items = (data as Schedule[]).sort(
         (a, b) =>
-          new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()
+          new Date(a.scheduled_at).getTime() -
+          new Date(b.scheduled_at).getTime(),
       );
       const todaySchedules = items.filter((schedule) => {
         const time = new Date(schedule.scheduled_at).getTime();
         return time >= startOfToday.getTime() && time <= endOfToday.getTime();
       });
       const pastSchedules = items
-        .filter((schedule) => new Date(schedule.scheduled_at).getTime() < startOfToday.getTime())
+        .filter(
+          (schedule) =>
+            new Date(schedule.scheduled_at).getTime() < startOfToday.getTime(),
+        )
         .sort(
           (a, b) =>
-            new Date(b.scheduled_at).getTime() - new Date(a.scheduled_at).getTime()
+            new Date(b.scheduled_at).getTime() -
+            new Date(a.scheduled_at).getTime(),
         );
       const futureSchedules = items.filter(
-        (schedule) => new Date(schedule.scheduled_at).getTime() > endOfToday.getTime()
+        (schedule) =>
+          new Date(schedule.scheduled_at).getTime() > endOfToday.getTime(),
       );
       const selectedSchedule =
         todaySchedules[0] ?? pastSchedules[0] ?? futureSchedules[0] ?? null;
@@ -207,15 +216,22 @@ export default function AttendancePage() {
       return;
     }
     const normalized =
-      (data as {
-        id: number;
-        member: { id: number; name: string } | { id: number; name: string }[] | null;
-      }[] | null) ?? [];
+      (data as
+        | {
+            id: number;
+            member:
+              | { id: number; name: string }
+              | { id: number; name: string }[]
+              | null;
+          }[]
+        | null) ?? [];
     setAttendanceList(
       normalized.map((row) => ({
         id: row.id,
-        member: Array.isArray(row.member) ? row.member[0] ?? null : row.member,
-      }))
+        member: Array.isArray(row.member)
+          ? (row.member[0] ?? null)
+          : row.member,
+      })),
     );
     setAttendanceLoading(false);
   };
@@ -256,7 +272,7 @@ export default function AttendancePage() {
     const activeMembers = members.filter((member) => !member?.withdrawn_at);
     if (!keyword) return activeMembers;
     return activeMembers.filter((member) =>
-      member.name.toLowerCase().includes(keyword)
+      member.name.toLowerCase().includes(keyword),
     );
   }, [members, query]);
 
@@ -303,7 +319,7 @@ export default function AttendancePage() {
 
   const openMemoDialogForLog = async (
     member: { id: number; name: string },
-    logId: number
+    logId: number,
   ) => {
     setSelectedMember(member);
     setMemo("");
@@ -566,7 +582,7 @@ export default function AttendancePage() {
                         row.member &&
                         openMemoDialogForLog(
                           { id: row.member.id, name: row.member.name },
-                          row.id
+                          row.id,
                         )
                       }
                       disabled={!row.member}
@@ -583,4 +599,3 @@ export default function AttendancePage() {
     </div>
   );
 }
-

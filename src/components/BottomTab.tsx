@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Calendar, CheckCircle2, Users } from "lucide-react";
+import { Calculator, Calendar, CheckCircle2, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const tabs = [
   { href: "/members", label: "멤버", icon: Users },
   { href: "/attendance", label: "출석", icon: CheckCircle2 },
   { href: "/calendar", label: "일정", icon: Calendar },
+  { href: "/settlement", label: "정산", icon: Calculator },
 ];
 
 export default function BottomTab() {
