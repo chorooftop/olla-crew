@@ -33,7 +33,7 @@ function Calendar({
     <DayPicker
       showOutsideDays={showOutsideDays}
       className={cn(
-        "bg-background group/calendar p-3 [--cell-size:--spacing(8)] [[data-slot=card-content]_&]:bg-transparent [[data-slot=popover-content]_&]:bg-transparent",
+        "bg-background group/calendar p-3 [--cell-size:--spacing(11)] sm:[--cell-size:--spacing(9)] [[data-slot=card-content]_&]:bg-transparent [[data-slot=popover-content]_&]:bg-transparent",
         String.raw`rtl:**:[.rdp-button\_next>svg]:rotate-180`,
         String.raw`rtl:**:[.rdp-button\_previous>svg]:rotate-180`,
         className
@@ -57,12 +57,12 @@ function Calendar({
         ),
         button_previous: cn(
           buttonVariants({ variant: buttonVariant }),
-          "size-(--cell-size) aria-disabled:opacity-50 p-0 select-none",
+          "size-11 aria-disabled:opacity-50 p-0 select-none touch-target",
           defaultClassNames.button_previous
         ),
         button_next: cn(
           buttonVariants({ variant: buttonVariant }),
-          "size-(--cell-size) aria-disabled:opacity-50 p-0 select-none",
+          "size-11 aria-disabled:opacity-50 p-0 select-none touch-target",
           defaultClassNames.button_next
         ),
         month_caption: cn(
@@ -91,7 +91,7 @@ function Calendar({
         table: "w-full border-collapse",
         weekdays: cn("flex", defaultClassNames.weekdays),
         weekday: cn(
-          "text-muted-foreground rounded-md flex-1 font-normal text-[0.8rem] select-none",
+          "text-muted-foreground rounded-md flex-1 font-medium text-sm sm:text-xs select-none",
           defaultClassNames.weekday
         ),
         week: cn("flex w-full mt-2", defaultClassNames.week),

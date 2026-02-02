@@ -349,8 +349,7 @@ export default function SettlementPage() {
       }
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
-      console.error(error);
+    } catch {
       toast.error("복사에 실패했습니다. 텍스트를 직접 선택해주세요.");
     }
   };
@@ -595,7 +594,7 @@ export default function SettlementPage() {
                     먼저 참여자를 등록해 주세요.
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
                     {members.map((member) => {
                       const isActive = round.participants.includes(member);
                       const isDrinker = round.drinkers.includes(member);
@@ -605,10 +604,10 @@ export default function SettlementPage() {
                             type="button"
                             onClick={() => toggleParticipant(round.id, member)}
                             className={cn(
-                              "rounded-md border px-2 py-2 text-sm font-medium transition-colors",
+                              "rounded-lg border px-2 py-2.5 text-sm font-medium transition-all touch-target",
                               isActive
-                                ? "border-primary bg-primary/10 text-primary"
-                                : "border-border/70 text-muted-foreground hover:bg-muted/40",
+                                ? "border-primary bg-primary/10 text-primary shadow-sm"
+                                : "border-border/70 text-muted-foreground hover:bg-muted/40 hover:border-primary/30",
                             )}
                           >
                             {member}
@@ -618,18 +617,18 @@ export default function SettlementPage() {
                               type="button"
                               onClick={() => toggleDrinker(round.id, member)}
                               className={cn(
-                                "flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors",
+                                "flex items-center justify-center gap-1 rounded-lg border px-2 py-1.5 text-xs transition-all",
                                 isDrinker
-                                  ? "border-amber-200 bg-amber-100 text-amber-700"
-                                  : "border-border/70 text-muted-foreground",
+                                  ? "border-warning bg-warning/20 text-warning-foreground"
+                                  : "border-border/70 text-muted-foreground hover:bg-muted/40",
                               )}
                             >
                               {isDrinker ? (
-                                <Beer className="h-3 w-3" />
+                                <Beer className="h-3.5 w-3.5" />
                               ) : (
-                                <Coffee className="h-3 w-3" />
+                                <Coffee className="h-3.5 w-3.5" />
                               )}
-                              {isDrinker ? "술 마심" : "음료/X"}
+                              {isDrinker ? "술" : "음료"}
                             </button>
                           )}
                         </div>
@@ -652,8 +651,8 @@ export default function SettlementPage() {
         새로운 N차 추가하기
       </Button>
 
-      <Card className="border-primary/40 bg-primary/5">
-        <CardHeader className="flex flex-row items-center gap-2">
+      <Card className="border-primary/40 overflow-hidden shadow-lg">
+        <CardHeader className="flex flex-row items-center gap-2 card-header-gradient">
           <Calculator className="h-5 w-5 text-primary" />
           <CardTitle className="text-lg">최종 정산 결과</CardTitle>
         </CardHeader>

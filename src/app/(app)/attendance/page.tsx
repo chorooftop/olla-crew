@@ -422,25 +422,42 @@ export default function AttendancePage() {
               등록된 일정이 없습니다.
             </div>
           ) : (
-            <div className="flex gap-2 overflow-x-auto pb-2">
-              {schedules.map((schedule) => {
-                const active = schedule.id === selectedScheduleId;
-                return (
-                  <button
-                    key={schedule.id}
-                    type="button"
-                    onClick={() => setSelectedScheduleId(schedule.id)}
-                    className={
-                      active
-                        ? "shrink-0 rounded-full border border-primary bg-primary/10 px-3 py-2 text-left text-xs font-medium text-primary"
-                        : "shrink-0 rounded-full border px-3 py-2 text-left text-xs text-muted-foreground"
-                    }
-                  >
-                    {formatScheduleLabel(schedule)}
-                  </button>
-                );
-              })}
-            </div>
+            <>
+              {/* Mobile: dropdown select */}
+              <div className="block sm:hidden">
+                <select
+                  className="h-12 w-full rounded-lg border bg-background px-3 text-sm touch-target"
+                  value={selectedScheduleId ?? ""}
+                  onChange={(event) => setSelectedScheduleId(Number(event.target.value))}
+                >
+                  {schedules.map((schedule) => (
+                    <option key={schedule.id} value={schedule.id}>
+                      {formatScheduleLabel(schedule)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {/* Tablet+: horizontal chip buttons */}
+              <div className="hidden sm:flex gap-2 overflow-x-auto pb-2">
+                {schedules.map((schedule) => {
+                  const active = schedule.id === selectedScheduleId;
+                  return (
+                    <button
+                      key={schedule.id}
+                      type="button"
+                      onClick={() => setSelectedScheduleId(schedule.id)}
+                      className={`shrink-0 rounded-full border px-4 py-2.5 text-left text-sm font-medium transition-all touch-target ${
+                        active
+                          ? "border-primary bg-primary/10 text-primary shadow-sm"
+                          : "border-border text-muted-foreground hover:border-primary/50 hover:bg-muted"
+                      }`}
+                    >
+                      {formatScheduleLabel(schedule)}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -481,23 +498,40 @@ export default function AttendancePage() {
       <div className="space-y-3">
         {filteredMembers.map((member) => {
           const attended = Boolean(attendanceMap[member.id]);
+          const initial = member.name.charAt(0);
           return (
             <div
               key={member.id}
-              className="flex items-center justify-between rounded-lg border bg-card p-4"
+              className={`flex items-center justify-between rounded-xl border bg-card p-4 transition-all card-interactive animate-fade-in ${
+                attended ? "border-success bg-success-soft" : ""
+              }`}
             >
-              <div className="text-sm font-medium">{member.name}</div>
+              <div className="flex items-center gap-3">
+                <div className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold ${
+                  attended
+                    ? "bg-success text-success-foreground"
+                    : "bg-muted text-muted-foreground"
+                }`}>
+                  {initial}
+                </div>
+                <div>
+                  <div className="text-sm font-medium">{member.name}</div>
+                  {attended && (
+                    <div className="text-xs text-success-foreground/80">출석 완료</div>
+                  )}
+                </div>
+              </div>
               {attended ? (
                 <div className="flex gap-2">
                   <Button
-                    className="h-12 px-5 text-base"
+                    className="h-11 px-4 text-sm touch-target"
                     variant="secondary"
                     onClick={() => handleRemoveAttendanceForMember(member)}
                   >
-                    출석 해제
+                    해제
                   </Button>
                   <Button
-                    className="h-12 px-5 text-base"
+                    className="h-11 px-4 text-sm touch-target"
                     variant="outline"
                     onClick={() => openMemoDialog(member)}
                   >
@@ -506,7 +540,7 @@ export default function AttendancePage() {
                 </div>
               ) : (
                 <Button
-                  className="h-12 px-6 text-base"
+                  className="h-11 px-5 text-sm touch-target"
                   onClick={() => handleCheckAttendance(member)}
                 >
                   출석하기

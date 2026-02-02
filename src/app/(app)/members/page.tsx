@@ -6,12 +6,7 @@ import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { fetchAuthInfo } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -49,9 +44,9 @@ function formatDate(value?: string | null) {
 
 export default function MembersPage() {
   const [members, setMembers] = useState<Member[]>([]);
-  const [latestAttendance, setLatestAttendance] = useState<Record<string, string>>(
-    {}
-  );
+  const [latestAttendance, setLatestAttendance] = useState<
+    Record<string, string>
+  >({});
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [newName, setNewName] = useState("");
@@ -78,7 +73,7 @@ export default function MembersPage() {
   const [savingEdit, setSavingEdit] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [withdrawingMember, setWithdrawingMember] = useState<Member | null>(
-    null
+    null,
   );
   const [withdrawing, setWithdrawing] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
@@ -86,9 +81,9 @@ export default function MembersPage() {
   const [manualDate, setManualDate] = useState("");
   const [manualMemo, setManualMemo] = useState("");
   const [manualSaving, setManualSaving] = useState(false);
-  const [expandedMembers, setExpandedMembers] = useState<Record<number, boolean>>(
-    {}
-  );
+  const [expandedMembers, setExpandedMembers] = useState<
+    Record<number, boolean>
+  >({});
 
   const loadMembers = async () => {
     setLoading(true);
@@ -106,7 +101,7 @@ export default function MembersPage() {
     const { data: logData, error: logError } = await supabase
       .from("attendance_logs")
       .select(
-        "member_id,created_at,schedule:schedules!attendance_logs_schedule_id_fkey(scheduled_at)"
+        "member_id,created_at,schedule:schedules!attendance_logs_schedule_id_fkey(scheduled_at)",
       )
       .order("scheduled_at", {
         ascending: false,
@@ -164,8 +159,8 @@ export default function MembersPage() {
 
     setMembers((prev) =>
       prev.map((member) =>
-        member.id === memberId ? { ...member, memo } : member
-      )
+        member.id === memberId ? { ...member, memo } : member,
+      ),
     );
     toast.success("메모가 수정되었습니다.");
     return true;
@@ -377,13 +372,17 @@ export default function MembersPage() {
       const joinedA = getDateTime(a.joined_at);
       const joinedB = getDateTime(b.joined_at);
       const attendanceA = getDateTime(
-        latestAttendance[String(a.id)] ?? a.joined_at ?? null
+        latestAttendance[String(a.id)] ?? a.joined_at ?? null,
       );
       const attendanceB = getDateTime(
-        latestAttendance[String(b.id)] ?? b.joined_at ?? null
+        latestAttendance[String(b.id)] ?? b.joined_at ?? null,
       );
 
-      const compareDates = (left: number, right: number, ascending: boolean) => {
+      const compareDates = (
+        left: number,
+        right: number,
+        ascending: boolean,
+      ) => {
         const leftValid = Number.isFinite(left);
         const rightValid = Number.isFinite(right);
         if (!leftValid && !rightValid) return 0;
@@ -499,14 +498,14 @@ export default function MembersPage() {
         </div>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           총 멤버: {members.length}명
-                      <Button
-              variant="outline"
-              size="sm"
-              onClick={loadMembers}
-              disabled={loading}
-            >
-              새로고침
-            </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadMembers}
+            disabled={loading}
+          >
+            새로고침
+          </Button>
         </div>
         <div className="space-y-2">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -532,51 +531,53 @@ export default function MembersPage() {
           </div>
           <div
             className={`grid overflow-hidden transition-[grid-template-rows,opacity] duration-200 ease-out ${
-              filterOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+              filterOpen
+                ? "grid-rows-[1fr] opacity-100"
+                : "grid-rows-[0fr] opacity-0"
             }`}
             aria-hidden={!filterOpen}
           >
             <div className="min-h-0">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <select
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm sm:w-[140px]"
+                  className="h-11 w-full rounded-lg border bg-background px-3 text-sm touch-target"
                   value={roleFilter}
                   onChange={(event) => setRoleFilter(event.target.value)}
                 >
-                  <option value="ALL">전체</option>
+                  <option value="ALL">권한: 전체</option>
                   <option value="ADMIN">ADMIN</option>
                   <option value="MEMBER">MEMBER</option>
                 </select>
                 <select
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm sm:w-[140px]"
+                  className="h-11 w-full rounded-lg border bg-background px-3 text-sm touch-target"
                   value={withdrawFilter}
                   onChange={(event) => setWithdrawFilter(event.target.value)}
                 >
-                  <option value="ACTIVE">탈퇴 아님</option>
+                  <option value="ACTIVE">활동 중</option>
                   <option value="WITHDRAWN">탈퇴</option>
-                  <option value="ALL">전체</option>
+                  <option value="ALL">상태: 전체</option>
                 </select>
                 <select
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm sm:w-[160px]"
+                  className="h-11 w-full rounded-lg border bg-background px-3 text-sm touch-target"
                   value={attendanceFilter}
-                  onChange={(event) => setAttendanceFilter(event.target.value)}
+                  onChange={(event) =>
+                    setAttendanceFilter(event.target.value)
+                  }
                 >
-                  <option value="ALL">출석 전체</option>
+                  <option value="ALL">출석: 전체</option>
                   <option value="ATTENDED">출석 있음</option>
                   <option value="NOT_ATTENDED">미참여</option>
                 </select>
                 <select
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm sm:w-[180px]"
+                  className="h-11 w-full rounded-lg border bg-background px-3 text-sm touch-target"
                   value={sortOption}
                   onChange={(event) => setSortOption(event.target.value)}
                 >
-                  <option value="joined_desc">가입일 최신순</option>
-                  <option value="joined_asc">가입일 오래된순</option>
-                  <option value="attendance_desc">출석일 최신순</option>
-                  <option value="attendance_asc">출석일 오래된순</option>
+                  <option value="joined_desc">가입 최신순</option>
+                  <option value="joined_asc">가입 오래된순</option>
+                  <option value="attendance_desc">출석 최신순</option>
+                  <option value="attendance_asc">출석 오래된순</option>
                 </select>
-                </div>
               </div>
             </div>
           </div>
@@ -608,130 +609,143 @@ export default function MembersPage() {
           </div>
         )}
         {filteredMembers.map((member) => {
-          const latestAttendanceDate = latestAttendance[String(member.id)] ?? null;
+          const latestAttendanceDate =
+            latestAttendance[String(member.id)] ?? null;
           const fallbackDate = getAttendanceOrJoined(member);
           const daysSince = getDaysSince(fallbackDate);
           const needsAttention =
-            !latestAttendanceDate && typeof daysSince === "number" && daysSince >= 30;
+            !latestAttendanceDate ||
+            (typeof daysSince === "number" && daysSince >= 30);
           const isExpanded = Boolean(expandedMembers[member.id]);
           const isAdminWithdrawRestricted =
             member.role === "ADMIN" && adminRole !== "ROOT";
 
           return (
-          <Card
-            key={member.id}
-            className={needsAttention ? "border-destructive/70" : undefined}
-          >
-            <CardHeader className="flex flex-row items-start justify-between gap-4">
-              <div>
-                <CardTitle className="text-lg">{member.name}</CardTitle>
-                <div
-                  className={`mt-1 flex flex-wrap items-center gap-2 text-muted-foreground ${
-                    isExpanded ? "text-xs" : "text-[11px]"
-                  }`}
-                >
-                  <span>생년월일: {formatDate(member.birth_date)}</span>
-                  <span>가입일: {formatDate(member.joined_at)}</span>
+            <Card
+              key={member.id}
+              className={`card-interactive animate-fade-in ${needsAttention ? "border-warning bg-warning-soft" : ""}`}
+            >
+              <CardHeader className="flex flex-row items-start justify-between gap-4">
+                <div>
+                  <CardTitle className="text-lg">{member.name}</CardTitle>
+                  <div
+                    className={`mt-1 flex flex-wrap items-center gap-2 text-muted-foreground ${
+                      isExpanded ? "text-xs" : "text-[11px]"
+                    }`}
+                  >
+                    <span>생년월일: {formatDate(member.birth_date)}</span>
+                    <span>가입일: {formatDate(member.joined_at)}</span>
+                  </div>
                 </div>
-              </div>
-              <div className="flex flex-row items-start gap-2">
-                {needsAttention && typeof daysSince === "number" && (
-                  <Badge variant="destructive" className="flex flex-col gap-1">
-                    미참여 {daysSince}일
-                  </Badge>
-                )}
-                <div className="flex flex-col items-end gap-1">
-                  {member.role && (
+                <div className="flex flex-row items-start gap-2">
+                  {needsAttention && typeof daysSince === "number" && (
                     <Badge
-                      variant={member.role === "ADMIN" ? "default" : "secondary"}
+                      className="flex flex-col gap-1 bg-warning text-warning-foreground"
                     >
-                      {member.role}
+                      {daysSince}일 미참여
                     </Badge>
                   )}
-                  {member.withdrawn_at && (
-                    <Badge variant="secondary">탈퇴</Badge>
-                  )}
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3 pb-0">
-              <div className="text-sm">
-                최근 출석일:{" "}
-                <span className="font-medium">
-                  {latestAttendanceDate ? formatDate(latestAttendanceDate) : "미참여"}
-                </span>
-              </div>
-              <div
-                className={`grid overflow-hidden transition-[grid-template-rows,opacity] duration-200 ${
-                  isExpanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
-                }`}
-                aria-hidden={!isExpanded}
-              >
-                <div className="min-h-0 space-y-3">
-                  <div className="rounded-lg border bg-muted/40 p-3 text-sm">
-                    <div className="text-xs text-muted-foreground">관리자 메모</div>
-                    <p className="mt-1 whitespace-pre-line">
-                      {member.memo || "메모 없음"}
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button variant="outline" className="w-full">
-                          메모 수정
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>{member.name} 메모 수정</DialogTitle>
-                        </DialogHeader>
-                        <MemoEditor member={member} onSave={handleSaveMemo} />
-                      </DialogContent>
-                    </Dialog>
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => openEditDialog(member)}
-                    >
-                      정보 수정
-                    </Button>
-                    {/* 초록색버튼 */}
-                    <Button
-                      variant="outline"
-                      className="w-full bg-blue-500 text-white"
-                      onClick={() => openManualDialog(member)}
-                    >
-                      수동 출석
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      className="w-full"
-                      onClick={() => openWithdrawDialog(member)}
-                      disabled={Boolean(member.withdrawn_at) || isAdminWithdrawRestricted}
-                    >
-                      {member.withdrawn_at ? "탈퇴됨" : "탈퇴 처리"}
-                    </Button>
+                  <div className="flex flex-col items-end gap-1">
+                    {member.role && (
+                      <Badge
+                        variant={
+                          member.role === "ADMIN" ? "default" : "secondary"
+                        }
+                      >
+                        {member.role}
+                      </Badge>
+                    )}
+                    {member.withdrawn_at && (
+                      <Badge variant="secondary">탈퇴</Badge>
+                    )}
                   </div>
                 </div>
-              </div>
-              <div className="border-t">
-                <Button
-                  variant="ghost"
-                  size="lg"
-                  onClick={() => toggleMemberDetails(member.id)}
-                  className="h-7 w-full rounded-md p-0"
-                  aria-label={isExpanded ? "상세 닫기" : "상세 펼치기"}
+              </CardHeader>
+              <CardContent className="space-y-3 pb-0">
+                <div className="text-sm">
+                  최근 출석일:{" "}
+                  <span className="font-medium">
+                    {latestAttendanceDate
+                      ? formatDate(latestAttendanceDate)
+                      : "미참여"}
+                  </span>
+                </div>
+                <div
+                  className={`grid overflow-hidden transition-[grid-template-rows,opacity] duration-200 ${
+                    isExpanded
+                      ? "grid-rows-[1fr] opacity-100"
+                      : "grid-rows-[0fr] opacity-0"
+                  }`}
+                  aria-hidden={!isExpanded}
                 >
-                  <ChevronDown
-                    className={`h-4 w-4 transition-transform ${
-                      isExpanded ? "rotate-180" : ""
-                    }`}
-                  />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        );
+                  <div className="min-h-0 space-y-3">
+                    <div className="rounded-lg border bg-muted/40 p-3 text-sm">
+                      <div className="text-xs text-muted-foreground">
+                        관리자 메모
+                      </div>
+                      <p className="mt-1 whitespace-pre-line">
+                        {member.memo || "메모 없음"}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" className="h-11 w-full touch-target">
+                            메모 수정
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>{member.name} 메모 수정</DialogTitle>
+                          </DialogHeader>
+                          <MemoEditor member={member} onSave={handleSaveMemo} />
+                        </DialogContent>
+                      </Dialog>
+                      <Button
+                        variant="outline"
+                        className="h-11 w-full touch-target"
+                        onClick={() => openEditDialog(member)}
+                      >
+                        정보 수정
+                      </Button>
+                      <Button
+                        className="h-11 w-full touch-target bg-success text-success-foreground hover:bg-success/90"
+                        onClick={() => openManualDialog(member)}
+                      >
+                        수동 출석
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        className="h-11 w-full touch-target"
+                        onClick={() => openWithdrawDialog(member)}
+                        disabled={
+                          Boolean(member.withdrawn_at) ||
+                          isAdminWithdrawRestricted
+                        }
+                      >
+                        {member.withdrawn_at ? "탈퇴됨" : "탈퇴 처리"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+                <div className="border-t">
+                  <Button
+                    variant="ghost"
+                    size="lg"
+                    onClick={() => toggleMemberDetails(member.id)}
+                    className="h-7 w-full rounded-md p-0"
+                    aria-label={isExpanded ? "상세 닫기" : "상세 펼치기"}
+                  >
+                    <ChevronDown
+                      className={`h-4 w-4 transition-transform ${
+                        isExpanded ? "rotate-180" : ""
+                      }`}
+                    />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
         })}
       </div>
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
@@ -922,4 +936,3 @@ function MemoEditor({
     </div>
   );
 }
-

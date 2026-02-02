@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Mountain } from "lucide-react";
 import { toast } from "sonner";
 import { clearAuthed, fetchAuthInfo, getAuthToken } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -71,8 +72,7 @@ export default function TopBar() {
       setCurrentPassword("");
       setNextPassword("");
       setConfirmPassword("");
-    } catch (error) {
-      console.error(error);
+    } catch {
       toast.error("비밀번호 변경 중 오류가 발생했습니다.");
     } finally {
       setSaving(false);
@@ -86,10 +86,15 @@ export default function TopBar() {
   };
 
   return (
-    <div className="sticky top-0 z-10 border-b bg-muted/60 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-muted/50">
+    <div className="sticky top-0 z-10 border-b border-primary/10 bg-background/80 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-background/70">
       <div className="mx-auto flex max-w-lg items-center justify-between px-4 py-3">
-        <div className="text-sm">
-          <span className="font-medium">{adminName}</span>
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+            <Mountain className="h-4 w-4 text-primary" />
+          </div>
+          <div className="text-sm">
+            <span className="font-semibold text-foreground">{adminName}</span>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Dialog open={open} onOpenChange={setOpen}>

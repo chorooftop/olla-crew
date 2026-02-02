@@ -157,20 +157,6 @@ export default function CalendarPage() {
   );
 
   const currentMonth = calendarBaseMonth;
-  const nextMonth = startOfMonth(
-    new Date(
-      calendarBaseMonth.getFullYear(),
-      calendarBaseMonth.getMonth() + 1,
-      1,
-    ),
-  );
-  const prevMonth = startOfMonth(
-    new Date(
-      calendarBaseMonth.getFullYear(),
-      calendarBaseMonth.getMonth() - 1,
-      1,
-    ),
-  );
   const todayKey = toDateKey(new Date().toISOString());
   const listSchedules = schedules
     .filter((schedule) => {
@@ -627,76 +613,61 @@ export default function CalendarPage() {
 
       {viewMode === "calendar" ? (
         <div className="space-y-3">
-          {[currentMonth, nextMonth, prevMonth].map((month, index) => (
-            <div
-              key={month.toISOString()}
-              className="rounded-lg border bg-card p-3 sm:p-4"
-            >
-              <Calendar
-                mode="single"
-                selected={undefined}
-                month={month}
-                onMonthChange={(date) => {
-                  if (index !== 0) return;
-                  setCalendarBaseMonth(startOfMonth(date));
-                }}
-                hideNavigation={index !== 0}
-                className="w-full max-w-full [--cell-size:--spacing(6)] sm:[--cell-size:--spacing(8)]"
-                classNames={{
-                  root: "w-full max-w-full",
-                  months: "w-full flex flex-col gap-4",
-                  month: "w-full",
-                  weekdays: "flex",
-                  weekday:
-                    "text-muted-foreground rounded-md flex-1 font-normal text-[0.7rem] select-none",
-                }}
-                formatters={{
-                  formatCaption: (date) =>
-                    `${date.getFullYear()}년 ${date.getMonth() + 1}월`,
-                  formatWeekdayName: (date) =>
-                    date.toLocaleString("ko-KR", { weekday: "short" }),
-                }}
-                components={{
-                  DayButton: (props: DayButtonProps) => {
-                    const date = props.day.date;
-                    const offset = date.getTimezoneOffset() * 60000;
-                    const key = new Date(date.getTime() - offset)
-                      .toISOString()
-                      .slice(0, 10);
-                    const daySchedules = schedulesByDate[key] ?? [];
-                    const visible = daySchedules.slice(0, 2);
-                    const extra = daySchedules.length - visible.length;
+          <div className="rounded-xl border bg-card p-4 shadow-sm card-interactive">
+            <Calendar
+              mode="single"
+              selected={undefined}
+              month={currentMonth}
+              onMonthChange={(date) => {
+                setCalendarBaseMonth(startOfMonth(date));
+              }}
+              className="w-full max-w-full [--cell-size:--spacing(11)] sm:[--cell-size:--spacing(10)]"
+              classNames={{
+                root: "w-full max-w-full",
+                months: "w-full flex flex-col gap-4",
+                month: "w-full",
+                weekdays: "flex",
+                weekday:
+                  "text-muted-foreground rounded-md flex-1 font-medium text-sm select-none",
+              }}
+              formatters={{
+                formatCaption: (date) =>
+                  `${date.getFullYear()}년 ${date.getMonth() + 1}월`,
+                formatWeekdayName: (date) =>
+                  date.toLocaleString("ko-KR", { weekday: "short" }),
+              }}
+              components={{
+                DayButton: (props: DayButtonProps) => {
+                  const date = props.day.date;
+                  const offset = date.getTimezoneOffset() * 60000;
+                  const key = new Date(date.getTime() - offset)
+                    .toISOString()
+                    .slice(0, 10);
+                  const daySchedules = schedulesByDate[key] ?? [];
+                  const hasSchedules = daySchedules.length > 0;
 
-                    return (
-                      <CalendarDayButton
-                        {...props}
-                        onClick={() => openDayDetail(date, daySchedules)}
-                      >
-                        <div className="flex h-full w-full flex-col items-start gap-2 p-1 text-left sm:gap-1 sm:p-2">
-                          <span className="text-[10px] font-medium sm:text-xs">
-                            {date.getDate()}
+                  return (
+                    <CalendarDayButton
+                      {...props}
+                      onClick={() => openDayDetail(date, daySchedules)}
+                      className={hasSchedules ? "ring-2 ring-primary/30 ring-offset-1" : ""}
+                    >
+                      <div className="flex h-full w-full flex-col items-center justify-center gap-1 p-1 text-center">
+                        <span className="text-sm font-medium">
+                          {date.getDate()}
+                        </span>
+                        {hasSchedules && (
+                          <span className="text-[10px] font-medium text-primary">
+                            {daySchedules.length}개
                           </span>
-                          {visible.map((schedule) => (
-                            <span
-                              key={schedule.id}
-                              className="w-full truncate text-[9px] text-muted-foreground sm:text-[10px]"
-                            >
-                              {schedule.title.slice(0, 9)}...
-                            </span>
-                          ))}
-                          {extra > 0 && (
-                            <span className="text-[9px] text-muted-foreground sm:text-[10px]">
-                              +{extra}개
-                            </span>
-                          )}
-                        </div>
-                      </CalendarDayButton>
-                    );
-                  },
-                }}
-              />
-            </div>
-          ))}
+                        )}
+                      </div>
+                    </CalendarDayButton>
+                  );
+                },
+              }}
+            />
+          </div>
         </div>
       ) : (
         <div className="space-y-4">
