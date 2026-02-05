@@ -497,7 +497,7 @@ export default function MembersPage() {
           </Dialog>
         </div>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          총 멤버: {members.length}명
+          총 멤버: {members.filter((member) => !member.withdrawn_at).length}명
           <Button
             variant="outline"
             size="sm"
@@ -560,9 +560,7 @@ export default function MembersPage() {
                 <select
                   className="h-11 w-full rounded-lg border bg-background px-3 text-sm touch-target"
                   value={attendanceFilter}
-                  onChange={(event) =>
-                    setAttendanceFilter(event.target.value)
-                  }
+                  onChange={(event) => setAttendanceFilter(event.target.value)}
                 >
                   <option value="ALL">출석: 전체</option>
                   <option value="ATTENDED">출석 있음</option>
@@ -639,9 +637,7 @@ export default function MembersPage() {
                 </div>
                 <div className="flex flex-row items-start gap-2">
                   {needsAttention && typeof daysSince === "number" && (
-                    <Badge
-                      className="flex flex-col gap-1 bg-warning text-warning-foreground"
-                    >
+                    <Badge className="flex flex-col gap-1 bg-warning text-warning-foreground">
                       {daysSince}일 미참여
                     </Badge>
                   )}
@@ -690,7 +686,10 @@ export default function MembersPage() {
                     <div className="grid grid-cols-2 gap-2">
                       <Dialog>
                         <DialogTrigger asChild>
-                          <Button variant="outline" className="h-11 w-full touch-target">
+                          <Button
+                            variant="outline"
+                            className="h-11 w-full touch-target"
+                          >
                             메모 수정
                           </Button>
                         </DialogTrigger>
