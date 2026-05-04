@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { ComponentProps } from "react";
 import { toast } from "sonner";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Download } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { fetchAuthInfo } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Calendar, CalendarDayButton } from "@/components/ui/calendar";
+import { SomoimImportDialog } from "@/components/SomoimImportDialog";
 
 type Schedule = {
   id: number;
@@ -29,6 +30,7 @@ type Schedule = {
   memo: string | null;
   created_by: number | null;
   created_at: string | null;
+  external_event_id: string | null;
 };
 
 type ScheduleAttendance = {
@@ -77,6 +79,7 @@ export default function CalendarPage() {
   const [city, setCity] = useState("");
   const [location, setLocation] = useState("");
   const [memo, setMemo] = useState("");
+  const [externalEventId, setExternalEventId] = useState("");
   const [creating, setCreating] = useState(false);
   const [loadingLatest, setLoadingLatest] = useState(false);
   const [adminName, setAdminName] = useState<string>("관리자");
@@ -90,6 +93,7 @@ export default function CalendarPage() {
   const [editCity, setEditCity] = useState("");
   const [editLocation, setEditLocation] = useState("");
   const [editMemo, setEditMemo] = useState("");
+  const [editExternalEventId, setEditExternalEventId] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
   const [editManualTitle, setEditManualTitle] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -115,6 +119,7 @@ export default function CalendarPage() {
   const [dayDetailOpen, setDayDetailOpen] = useState(false);
   const [dayDetailTitle, setDayDetailTitle] = useState("");
   const [dayDetailSchedules, setDayDetailSchedules] = useState<Schedule[]>([]);
+  const [somoimImportOpen, setSomoimImportOpen] = useState(false);
 
   type DayButtonProps = ComponentProps<typeof CalendarDayButton>;
 
@@ -123,7 +128,7 @@ export default function CalendarPage() {
     const { data, error } = await supabase
       .from("schedules")
       .select(
-        "id,title,type,scheduled_at,city,location,memo,created_by,created_at",
+        "id,title,type,scheduled_at,city,location,memo,created_by,created_at,external_event_id",
       )
       .order("scheduled_at", { ascending: false });
 
@@ -209,6 +214,7 @@ export default function CalendarPage() {
     setCity("");
     setLocation("");
     setMemo("");
+    setExternalEventId("");
     setManualTitle(false);
   };
 
@@ -250,6 +256,7 @@ export default function CalendarPage() {
     setEditCity(schedule.city ?? "");
     setEditLocation(schedule.location ?? "");
     setEditMemo(schedule.memo ?? "");
+    setEditExternalEventId(schedule.external_event_id ?? "");
     setEditManualTitle(false);
     setEditOpen(true);
   };
@@ -278,6 +285,7 @@ export default function CalendarPage() {
       city: editCity.trim() || null,
       location: editLocation.trim() || null,
       memo: editMemo.trim() || null,
+      external_event_id: editExternalEventId.trim() || null,
     };
 
     const { error } = await supabase
@@ -380,6 +388,7 @@ export default function CalendarPage() {
       location: location.trim() || null,
       memo: memo.trim() || null,
       created_by: adminMemberId,
+      external_event_id: externalEventId.trim() || null,
     };
 
     const { error } = await supabase.from("schedules").insert(payload);
@@ -429,8 +438,18 @@ export default function CalendarPage() {
     <div className="space-y-4">
       <header className="space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <div>
+          <div className="space-y-2">
             <h1 className="text-2xl font-semibold">모임 일정 관리</h1>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setSomoimImportOpen(true)}
+            >
+              <Download className="size-3.5" />
+              데이터 가져오기
+            </Button>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex overflow-hidden rounded-md border">
@@ -559,6 +578,23 @@ export default function CalendarPage() {
                       value={location}
                       onChange={(event) => setLocation(event.target.value)}
                       placeholder="예: 더클라임"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label
+                      className="text-sm font-medium"
+                      htmlFor="schedule-external-event-id"
+                    >
+                      소모임 일정 ID (external_event_id)
+                    </label>
+                    <Input
+                      id="schedule-external-event-id"
+                      value={externalEventId}
+                      onChange={(event) =>
+                        setExternalEventId(event.target.value)
+                      }
+                      placeholder="소모임 데이터 가져오기에서 복사"
+                      className="font-mono text-xs"
                     />
                   </div>
                   <div className="space-y-2">
@@ -875,6 +911,23 @@ export default function CalendarPage() {
               />
             </div>
             <div className="space-y-2">
+              <label
+                className="text-sm font-medium"
+                htmlFor="edit-external-event-id"
+              >
+                소모임 일정 ID (external_event_id)
+              </label>
+              <Input
+                id="edit-external-event-id"
+                value={editExternalEventId}
+                onChange={(event) =>
+                  setEditExternalEventId(event.target.value)
+                }
+                placeholder="소모임 일정 ID"
+                className="font-mono text-xs"
+              />
+            </div>
+            <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="edit-memo">
                 메모
               </label>
@@ -927,6 +980,12 @@ export default function CalendarPage() {
           </div>
         </DialogContent>
       </Dialog>
+      <SomoimImportDialog
+        open={somoimImportOpen}
+        onOpenChange={setSomoimImportOpen}
+        onUpdated={loadSchedules}
+        adminMemberId={adminMemberId}
+      />
       <Dialog open={attendanceOpen} onOpenChange={setAttendanceOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>

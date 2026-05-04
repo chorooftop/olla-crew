@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Download } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { fetchAuthInfo } from "@/lib/auth";
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { SomoimMemberLinkDialog } from "@/components/SomoimMemberLinkDialog";
 
 type Member = {
   id: number;
@@ -26,6 +27,7 @@ type Member = {
   role: string | null;
   memo: string | null;
   withdrawn_at: string | null;
+  external_user_id: string | null;
 };
 
 type AttendanceLog = {
@@ -54,6 +56,7 @@ export default function MembersPage() {
   const [newJoinedAt, setNewJoinedAt] = useState("");
   const [newRole, setNewRole] = useState("MEMBER");
   const [newMemo, setNewMemo] = useState("");
+  const [newExternalUserId, setNewExternalUserId] = useState("");
   const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("ALL");
@@ -70,6 +73,7 @@ export default function MembersPage() {
   const [editJoinedAt, setEditJoinedAt] = useState("");
   const [editRole, setEditRole] = useState("MEMBER");
   const [editMemo, setEditMemo] = useState("");
+  const [editExternalUserId, setEditExternalUserId] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [withdrawingMember, setWithdrawingMember] = useState<Member | null>(
@@ -84,12 +88,15 @@ export default function MembersPage() {
   const [expandedMembers, setExpandedMembers] = useState<
     Record<number, boolean>
   >({});
+  const [linkOpen, setLinkOpen] = useState(false);
 
   const loadMembers = async () => {
     setLoading(true);
     const { data: memberData, error: memberError } = await supabase
       .from("members")
-      .select("id,name,birth_date,joined_at,role,memo,withdrawn_at")
+      .select(
+        "id,name,birth_date,joined_at,role,memo,withdrawn_at,external_user_id",
+      )
       .order("joined_at", { ascending: false });
 
     if (memberError) {
@@ -144,6 +151,23 @@ export default function MembersPage() {
       void loadMembers();
     };
     void load();
+
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const prefillName = params.get("prefill_name");
+      const prefillExternalUserId = params.get("prefill_external_user_id");
+      if (prefillName || prefillExternalUserId) {
+        if (prefillName) setNewName(prefillName);
+        if (prefillExternalUserId) setNewExternalUserId(prefillExternalUserId);
+        setAddOpen(true);
+        params.delete("prefill_name");
+        params.delete("prefill_external_user_id");
+        const query = params.toString();
+        const nextUrl =
+          window.location.pathname + (query ? `?${query}` : "");
+        window.history.replaceState(null, "", nextUrl);
+      }
+    }
   }, []);
 
   const handleSaveMemo = async (memberId: number, memo: string) => {
@@ -181,6 +205,7 @@ export default function MembersPage() {
     setEditJoinedAt(toDateInputValue(member.joined_at));
     setEditRole(member.role ?? "MEMBER");
     setEditMemo(member.memo ?? "");
+    setEditExternalUserId(member.external_user_id ?? "");
     setEditOpen(true);
   };
 
@@ -198,6 +223,7 @@ export default function MembersPage() {
         ? new Date(editJoinedAt).toISOString()
         : editingMember.joined_at,
       memo: editMemo.trim() || null,
+      external_user_id: editExternalUserId.trim() || null,
     };
     if (adminRole === "ROOT") {
       payload.role = editRole;
@@ -298,6 +324,7 @@ export default function MembersPage() {
     setNewJoinedAt("");
     setNewRole("MEMBER");
     setNewMemo("");
+    setNewExternalUserId("");
   };
 
   const handleCreateMember = async () => {
@@ -316,6 +343,7 @@ export default function MembersPage() {
       role: adminRole === "ROOT" ? newRole : "MEMBER",
       memo: newMemo.trim() || null,
       withdrawn_at: null,
+      external_user_id: newExternalUserId.trim() || null,
     };
 
     const { error } = await supabase.from("members").insert(payload);
@@ -411,101 +439,147 @@ export default function MembersPage() {
           <div>
             <h1 className="text-2xl font-semibold">멤버 리스트</h1>
           </div>
-          <Dialog open={addOpen} onOpenChange={setAddOpen}>
-            <DialogTrigger asChild>
-              <Button className="h-10">멤버 추가</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>새 멤버 등록</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium" htmlFor="new-name">
-                    이름
-                  </label>
-                  <Input
-                    id="new-name"
-                    value={newName}
-                    onChange={(event) => setNewName(event.target.value)}
-                    placeholder="이름 입력"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium" htmlFor="new-birth">
-                    생년월일
-                  </label>
-                  <Input
-                    id="new-birth"
-                    type="date"
-                    value={newBirthDate}
-                    onChange={(event) => setNewBirthDate(event.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium" htmlFor="new-joined">
-                    가입일
-                  </label>
-                  <Input
-                    id="new-joined"
-                    type="date"
-                    value={newJoinedAt}
-                    onChange={(event) => setNewJoinedAt(event.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium" htmlFor="new-role">
-                    권한
-                  </label>
-                  {adminRole === "ROOT" ? (
-                    <select
-                      id="new-role"
-                      className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                      value={newRole}
-                      onChange={(event) => setNewRole(event.target.value)}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              className="h-10 gap-1.5"
+              onClick={() => setLinkOpen(true)}
+            >
+              <Download className="size-3.5" />
+              유저 가져오기
+            </Button>
+            <Dialog open={addOpen} onOpenChange={setAddOpen}>
+              <DialogTrigger asChild>
+                <Button className="h-10">멤버 추가</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>새 멤버 등록</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium" htmlFor="new-name">
+                      이름
+                    </label>
+                    <Input
+                      id="new-name"
+                      value={newName}
+                      onChange={(event) => setNewName(event.target.value)}
+                      placeholder="이름 입력"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium" htmlFor="new-birth">
+                      생년월일
+                    </label>
+                    <Input
+                      id="new-birth"
+                      type="date"
+                      value={newBirthDate}
+                      onChange={(event) => setNewBirthDate(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium" htmlFor="new-joined">
+                      가입일
+                    </label>
+                    <Input
+                      id="new-joined"
+                      type="date"
+                      value={newJoinedAt}
+                      onChange={(event) => setNewJoinedAt(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium" htmlFor="new-role">
+                      권한
+                    </label>
+                    {adminRole === "ROOT" ? (
+                      <select
+                        id="new-role"
+                        className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                        value={newRole}
+                        onChange={(event) => setNewRole(event.target.value)}
+                      >
+                        <option value="MEMBER">MEMBER</option>
+                        <option value="ADMIN">ADMIN</option>
+                      </select>
+                    ) : (
+                      <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                        MEMBER (ROOT만 변경 가능)
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <label
+                      className="text-sm font-medium"
+                      htmlFor="new-external-user-id"
                     >
-                      <option value="MEMBER">MEMBER</option>
-                      <option value="ADMIN">ADMIN</option>
-                    </select>
-                  ) : (
-                    <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                      MEMBER (ROOT만 변경 가능)
-                    </div>
-                  )}
+                      소모임 유저 ID (external_user_id)
+                    </label>
+                    <Input
+                      id="new-external-user-id"
+                      value={newExternalUserId}
+                      onChange={(event) =>
+                        setNewExternalUserId(event.target.value)
+                      }
+                      placeholder="소모임 데이터 가져오기에서 자동 입력"
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium" htmlFor="new-memo">
+                      메모
+                    </label>
+                    <Textarea
+                      id="new-memo"
+                      rows={4}
+                      value={newMemo}
+                      onChange={(event) => setNewMemo(event.target.value)}
+                      placeholder="관리자 메모를 입력하세요."
+                    />
+                  </div>
+                  <Button
+                    className="h-12 w-full text-base"
+                    onClick={handleCreateMember}
+                    disabled={creating}
+                  >
+                    {creating ? "등록 중..." : "멤버 등록"}
+                  </Button>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium" htmlFor="new-memo">
-                    메모
-                  </label>
-                  <Textarea
-                    id="new-memo"
-                    rows={4}
-                    value={newMemo}
-                    onChange={(event) => setNewMemo(event.target.value)}
-                    placeholder="관리자 메모를 입력하세요."
-                  />
-                </div>
-                <Button
-                  className="h-12 w-full text-base"
-                  onClick={handleCreateMember}
-                  disabled={creating}
-                >
-                  {creating ? "등록 중..." : "멤버 등록"}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          총 멤버: {members.filter((member) => !member.withdrawn_at).length}명
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={loadMembers}
-            disabled={loading}
-          >
-            새로고침
-          </Button>
+        <div className="space-y-1 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2">
+            총 멤버: {members.filter((member) => !member.withdrawn_at).length}명
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadMembers}
+              disabled={loading}
+            >
+              새로고침
+            </Button>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <span>
+              활동자{" "}
+              <span className="font-medium text-foreground">
+                {members.filter((m) => !m.withdrawn_at).length}
+              </span>
+              명
+            </span>
+            <span aria-hidden>·</span>
+            <span>
+              탈퇴자{" "}
+              <span className="font-medium text-foreground">
+                {members.filter((m) => Boolean(m.withdrawn_at)).length}
+              </span>
+              명
+            </span>
+          </div>
         </div>
         <div className="space-y-2">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -809,6 +883,23 @@ export default function MembersPage() {
               )}
             </div>
             <div className="space-y-2">
+              <label
+                className="text-sm font-medium"
+                htmlFor="edit-external-user-id"
+              >
+                소모임 유저 ID (external_user_id)
+              </label>
+              <Input
+                id="edit-external-user-id"
+                value={editExternalUserId}
+                onChange={(event) =>
+                  setEditExternalUserId(event.target.value)
+                }
+                placeholder="소모임 user_id (UUID)"
+                className="font-mono text-xs"
+              />
+            </div>
+            <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="edit-memo">
                 메모
               </label>
@@ -900,6 +991,18 @@ export default function MembersPage() {
           </div>
         </DialogContent>
       </Dialog>
+      <SomoimMemberLinkDialog
+        open={linkOpen}
+        onOpenChange={setLinkOpen}
+        onUpdated={loadMembers}
+        onRequestAdd={(info) => {
+          resetNewMemberForm();
+          setNewName(info.nickname);
+          setNewExternalUserId(info.user_id);
+          setLinkOpen(false);
+          setAddOpen(true);
+        }}
+      />
     </div>
   );
 }

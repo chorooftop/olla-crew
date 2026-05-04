@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { fetchAuthInfo } from "@/lib/auth";
@@ -13,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AutoAttendanceDialog } from "@/components/AutoAttendanceDialog";
 
 type Member = {
   id: number;
@@ -28,6 +30,7 @@ type Schedule = {
   type: string | null;
   scheduled_at: string;
   location: string | null;
+  external_event_id: string | null;
 };
 
 type AttendanceLog = {
@@ -81,6 +84,7 @@ export default function AttendancePage() {
   const [attendanceList, setAttendanceList] = useState<
     { id: number; member: { id: number; name: string } | null }[]
   >([]);
+  const [autoOpen, setAutoOpen] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -126,7 +130,7 @@ export default function AttendancePage() {
 
       const { data, error } = await supabase
         .from("schedules")
-        .select("id,title,type,scheduled_at,location")
+        .select("id,title,type,scheduled_at,location,external_event_id")
         .gte("scheduled_at", start.toISOString())
         .order("scheduled_at", { ascending: true });
 
@@ -265,6 +269,19 @@ export default function AttendancePage() {
       setAttendanceCount(data?.length ?? 0);
     }
   };
+
+  const selectedSchedule = useMemo(
+    () => schedules.find((s) => s.id === selectedScheduleId) ?? null,
+    [schedules, selectedScheduleId],
+  );
+
+  const alreadyAttendedMemberIds = useMemo(
+    () =>
+      new Set(
+        Object.keys(attendanceMap).map((key) => Number(key)),
+      ),
+    [attendanceMap],
+  );
 
   const filteredMembers = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -469,6 +486,24 @@ export default function AttendancePage() {
           >
             출석 인원: {attendanceLoading ? "..." : attendanceCount}명
           </button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setAutoOpen(true)}
+            disabled={
+              !selectedSchedule || !selectedSchedule.external_event_id
+            }
+            title={
+              selectedSchedule?.external_event_id
+                ? "소모임 참석자 일괄 출석처리"
+                : "이 일정에 소모임 일정 ID(external_event_id)가 연결되어 있어야 합니다"
+            }
+          >
+            <Wand2 className="size-3.5" />
+            자동 출석처리
+          </Button>
         </div>
         <Input
           placeholder="멤버 이름 검색"
@@ -578,6 +613,18 @@ export default function AttendancePage() {
           </div>
         </DialogContent>
       </Dialog>
+      <AutoAttendanceDialog
+        open={autoOpen}
+        onOpenChange={setAutoOpen}
+        scheduleId={selectedScheduleId}
+        scheduleTitle={selectedSchedule?.title ?? "선택된 일정"}
+        externalEventId={selectedSchedule?.external_event_id ?? null}
+        adminMemberId={adminMemberId}
+        alreadyAttendedMemberIds={alreadyAttendedMemberIds}
+        onAttended={() => {
+          void refreshAttendance();
+        }}
+      />
       <Dialog open={attendanceOpen} onOpenChange={setAttendanceOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
