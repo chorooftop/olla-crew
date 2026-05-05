@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Beer,
   Calculator,
+  CalendarDays,
   Check,
   Coffee,
   Copy,
@@ -24,6 +25,28 @@ type Member = {
   withdrawn_at: string | null;
 };
 
+type ScheduleOption = {
+  id: number;
+  title: string;
+  scheduled_at: string;
+};
+
+function formatScheduleLabel(schedule: ScheduleOption): string {
+  const date = new Date(schedule.scheduled_at);
+  const dateLabel = Number.isNaN(date.getTime())
+    ? schedule.scheduled_at
+    : `(${date.toLocaleString("ko-KR", { weekday: "short" })}) ${date.toLocaleString(
+        "ko-KR",
+        {
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        },
+      )}`;
+  return `${schedule.title} / ${dateLabel}`;
+}
+
 type Round = {
   id: number;
   title: string;
@@ -43,15 +66,19 @@ const ACCOUNT_INFO_PRESETS: string[] = [
 ];
 const CUSTOM_ACCOUNT_VALUE = "__custom__";
 
-const createRound = (id: number, members: string[]): Round => ({
+const createRound = (
+  id: number,
+  participantsSeed: string[],
+  drinkersSeed: string[] = participantsSeed,
+): Round => ({
   id,
   title: `${id}차 장소`,
   cost: "",
-  participants: [...members],
+  participants: [...participantsSeed],
   useAlcohol: false,
   alcoholCost: "",
   beverageCost: "",
-  drinkers: [...members],
+  drinkers: [...drinkersSeed],
 });
 
 export default function SettlementPage() {
@@ -64,6 +91,11 @@ export default function SettlementPage() {
   const prevMembersRef = useRef<string[]>([]);
   const [accountInfo, setAccountInfo] = useState<string>("");
   const [accountSelection, setAccountSelection] = useState<string>("");
+  const [schedules, setSchedules] = useState<ScheduleOption[]>([]);
+  const [selectedScheduleId, setSelectedScheduleId] = useState<number | null>(
+    null,
+  );
+  const [loadingAttendees, setLoadingAttendees] = useState(false);
 
   const applyMembers = (nextMembers: string[], initialize = false) => {
     if (initialize) {
@@ -124,6 +156,97 @@ export default function SettlementPage() {
     void loadMembers();
   }, [loadMembers]);
 
+  const loadSchedules = useCallback(async () => {
+    const start = new Date();
+    start.setDate(start.getDate() - 3);
+
+    const { data, error } = await supabase
+      .from("schedules")
+      .select("id,title,scheduled_at")
+      .gte("scheduled_at", start.toISOString())
+      .order("scheduled_at", { ascending: true });
+
+    if (error) {
+      toast.error("일정 목록을 불러오지 못했습니다.");
+      return;
+    }
+    setSchedules((data as ScheduleOption[]) ?? []);
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line
+    void loadSchedules();
+  }, [loadSchedules]);
+
+  const handleScheduleSelect = async (scheduleId: number) => {
+    setSelectedScheduleId(scheduleId);
+
+    setLoadingAttendees(true);
+    const { data, error } = await supabase
+      .from("attendance_logs")
+      .select("member:members!attendance_logs_member_id_fkey(name,withdrawn_at)")
+      .eq("schedule_id", scheduleId);
+    setLoadingAttendees(false);
+
+    if (error) {
+      toast.error("출석자 정보를 불러오지 못했습니다.");
+      return;
+    }
+
+    const rows =
+      (data as
+        | {
+            member:
+              | { name: string; withdrawn_at: string | null }
+              | { name: string; withdrawn_at: string | null }[]
+              | null;
+          }[]
+        | null) ?? [];
+
+    const attendeeNames = rows
+      .map((row) =>
+        Array.isArray(row.member) ? (row.member[0] ?? null) : row.member,
+      )
+      .filter(
+        (member): member is { name: string; withdrawn_at: string | null } =>
+          Boolean(member) && !member!.withdrawn_at,
+      )
+      .map((member) => member.name);
+
+    if (attendeeNames.length === 0) {
+      toast.message("이 일정의 출석 기록이 없습니다.");
+      setRounds((prevRounds) =>
+        prevRounds.map((round) => ({
+          ...round,
+          participants: [],
+          drinkers: [],
+        })),
+      );
+      return;
+    }
+
+    const knownAttendees = attendeeNames.filter((name) =>
+      members.includes(name),
+    );
+    const skipped = attendeeNames.length - knownAttendees.length;
+
+    setRounds((prevRounds) =>
+      prevRounds.map((round) => ({
+        ...round,
+        participants: [...knownAttendees],
+        drinkers: [...knownAttendees],
+      })),
+    );
+
+    if (skipped > 0) {
+      toast.success(
+        `${knownAttendees.length}명 자동 선택됨 (참여자 목록에 없는 ${skipped}명 제외)`,
+      );
+    } else {
+      toast.success(`${knownAttendees.length}명을 참여자로 선택했습니다.`);
+    }
+  };
+
   const addMember = () => {
     const trimmed = newMemberName.trim();
     if (!trimmed) return;
@@ -163,7 +286,15 @@ export default function SettlementPage() {
         prevRounds.length > 0
           ? Math.max(...prevRounds.map((r) => r.id)) + 1
           : 1;
-      return [...prevRounds, createRound(nextId, members)];
+      const lastRound = prevRounds[prevRounds.length - 1];
+      return [
+        ...prevRounds,
+        createRound(
+          nextId,
+          lastRound?.participants ?? members,
+          lastRound?.drinkers ?? members,
+        ),
+      ];
     });
   };
 
@@ -238,6 +369,16 @@ export default function SettlementPage() {
       ),
     );
   };
+
+  const sortedSchedules = useMemo(
+    () =>
+      [...schedules].sort(
+        (a, b) =>
+          new Date(a.scheduled_at).getTime() -
+          new Date(b.scheduled_at).getTime(),
+      ),
+    [schedules],
+  );
 
   const floorTo10 = (num: number) => Math.floor(num / 10) * 10;
 
@@ -373,6 +514,75 @@ export default function SettlementPage() {
           </Button>
         </div>
       </header>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <CalendarDays className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">일정에서 참여자 가져오기</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            일정을 선택하면 출석한 멤버가 자동으로 모든 라운드의 참여자로
+            선택됩니다.
+          </p>
+          {schedules.length === 0 ? (
+            <div className="rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+              등록된 일정이 없습니다.
+            </div>
+          ) : (
+            <>
+              {/* Mobile: dropdown select */}
+              <div className="block sm:hidden">
+                <select
+                  className="h-12 w-full rounded-lg border bg-background px-3 text-sm touch-target disabled:opacity-60"
+                  value={selectedScheduleId ?? ""}
+                  onChange={(event) =>
+                    void handleScheduleSelect(Number(event.target.value))
+                  }
+                  disabled={loadingAttendees}
+                >
+                  <option value="" disabled>
+                    일정 선택
+                  </option>
+                  {sortedSchedules.map((schedule) => (
+                    <option key={schedule.id} value={schedule.id}>
+                      {formatScheduleLabel(schedule)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {/* Tablet+: horizontal chip buttons */}
+              <div className="hidden sm:flex gap-2 overflow-x-auto pb-2">
+                {sortedSchedules.map((schedule) => {
+                  const active = schedule.id === selectedScheduleId;
+                  return (
+                    <button
+                      key={schedule.id}
+                      type="button"
+                      onClick={() => void handleScheduleSelect(schedule.id)}
+                      disabled={loadingAttendees}
+                      className={`shrink-0 rounded-full border px-4 py-2.5 text-left text-sm font-medium transition-all touch-target disabled:opacity-60 ${
+                        active
+                          ? "border-primary bg-primary/10 text-primary shadow-sm"
+                          : "border-border text-muted-foreground hover:border-primary/50 hover:bg-muted"
+                      }`}
+                    >
+                      {formatScheduleLabel(schedule)}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+          {loadingAttendees && (
+            <p className="text-xs text-muted-foreground">
+              출석자 정보를 불러오는 중...
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2">

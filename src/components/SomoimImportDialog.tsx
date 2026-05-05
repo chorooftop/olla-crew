@@ -109,6 +109,7 @@ export function SomoimImportDialog({
           supabase
             .from("members")
             .select("id,name,external_user_id")
+            .is("withdrawn_at", null)
             .not("external_user_id", "is", null),
           supabase
             .from("schedules")
@@ -216,15 +217,66 @@ export function SomoimImportDialog({
       created_by: adminMemberId ?? null,
       external_event_id: event.event_id,
     }));
-    const { error: insertError } = await supabase
+    const { data: insertedRows, error: insertError } = await supabase
       .from("schedules")
-      .insert(payload);
-    if (insertError) {
+      .insert(payload)
+      .select("id,external_event_id");
+    if (insertError || !insertedRows) {
       toast.error("일정 생성에 실패했습니다.");
       setCreating(false);
       return;
     }
-    toast.success(`${eligible.length}개 일정이 생성되었습니다.`);
+
+    const inserted =
+      (insertedRows as { id: number; external_event_id: string | null }[]) ??
+      [];
+    const scheduleByEventId = new Map<string, number>();
+    for (const row of inserted) {
+      if (row.external_event_id) {
+        scheduleByEventId.set(row.external_event_id, row.id);
+      }
+    }
+
+    let attendanceCount = 0;
+    if (adminMemberId) {
+      const checkedBy = adminMemberId;
+      const attendancePayload = eligible.flatMap((event) => {
+        const scheduleId = scheduleByEventId.get(event.event_id);
+        if (!scheduleId) return [];
+        return event.participants
+          .map((participant) => memberMatches.get(participant.user_id))
+          .filter((match): match is MemberMatch => Boolean(match))
+          .map((match) => ({
+            member_id: match.id,
+            checked_by: checkedBy,
+            schedule_id: scheduleId,
+            memo: null as string | null,
+          }));
+      });
+      if (attendancePayload.length > 0) {
+        const { error: attendanceError } = await supabase
+          .from("attendance_logs")
+          .insert(attendancePayload);
+        if (attendanceError) {
+          toast.warning(
+            `${inserted.length}개 일정은 생성됐지만 출석 처리에 실패했습니다.`,
+          );
+          setCreating(false);
+          onUpdated?.();
+          await loadSnapshot();
+          return;
+        }
+        attendanceCount = attendancePayload.length;
+      }
+    }
+
+    if (attendanceCount > 0) {
+      toast.success(
+        `${inserted.length}개 일정 · ${attendanceCount}명 출석 처리 완료`,
+      );
+    } else {
+      toast.success(`${inserted.length}개 일정이 생성되었습니다.`);
+    }
     setCreating(false);
     onUpdated?.();
     await loadSnapshot();
@@ -238,6 +290,20 @@ export function SomoimImportDialog({
       return tb - ta;
     });
   }, [snapshot]);
+
+  const plannedAttendanceCount = useMemo(() => {
+    if (!snapshot) return 0;
+    let count = 0;
+    for (const event of snapshot.events) {
+      if (!selectedEvents.has(event.event_id)) continue;
+      if (scheduleMatches.has(event.event_id)) continue;
+      if (!event.start_at) continue;
+      for (const participant of event.participants) {
+        if (memberMatches.has(participant.user_id)) count += 1;
+      }
+    }
+    return count;
+  }, [snapshot, selectedEvents, scheduleMatches, memberMatches]);
 
   const filteredEvents = useMemo(() => {
     let base = sortedEvents;
@@ -405,9 +471,10 @@ export function SomoimImportDialog({
         </div>
 
         {sortedEvents.length > 0 && !error && (
-          <div className="flex items-center justify-between gap-2 border-t pt-3">
+          <div className="flex flex-col items-start gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
             <span className="text-xs text-muted-foreground">
-              선택됨 {selectedEvents.size}개
+              선택 {selectedEvents.size}개 · 출석 예정{" "}
+              {plannedAttendanceCount}명
             </span>
             <Button
               type="button"
@@ -416,8 +483,8 @@ export function SomoimImportDialog({
               className="gap-1"
             >
               {creating
-                ? "생성 중..."
-                : `선택한 ${selectedEvents.size}개 일정 생성`}
+                ? "처리 중..."
+                : `${selectedEvents.size}개 생성 & 출석처리`}
             </Button>
           </div>
         )}

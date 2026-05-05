@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { ComponentProps } from "react";
 import { toast } from "sonner";
-import { ChevronDown, Download } from "lucide-react";
+import { ChevronDown, ChevronRight, Download } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { fetchAuthInfo } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Calendar, CalendarDayButton } from "@/components/ui/calendar";
 import { SomoimImportDialog } from "@/components/SomoimImportDialog";
+import { SomoimImportTutorial } from "@/components/SomoimImportTutorial";
 
 type Schedule = {
   id: number;
@@ -112,7 +113,7 @@ export default function CalendarPage() {
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
   const [listFilterOpen, setListFilterOpen] = useState(false);
   const [listFilter, setListFilter] = useState("UPCOMING");
-  const [listSort, setListSort] = useState("PAST_FIRST");
+  const [listSort, setListSort] = useState("FUTURE_FIRST");
   const [calendarBaseMonth, setCalendarBaseMonth] = useState(() =>
     startOfMonth(new Date()),
   );
@@ -120,6 +121,7 @@ export default function CalendarPage() {
   const [dayDetailTitle, setDayDetailTitle] = useState("");
   const [dayDetailSchedules, setDayDetailSchedules] = useState<Schedule[]>([]);
   const [somoimImportOpen, setSomoimImportOpen] = useState(false);
+  const [tutorialOpen, setTutorialOpen] = useState(false);
 
   type DayButtonProps = ComponentProps<typeof CalendarDayButton>;
 
@@ -437,20 +439,8 @@ export default function CalendarPage() {
   return (
     <div className="space-y-4">
       <header className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="space-y-2">
-            <h1 className="text-2xl font-semibold">모임 일정 관리</h1>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => setSomoimImportOpen(true)}
-            >
-              <Download className="size-3.5" />
-              데이터 가져오기
-            </Button>
-          </div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl font-semibold">모임 일정 관리</h1>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex overflow-hidden rounded-md border">
               <Button
@@ -472,7 +462,9 @@ export default function CalendarPage() {
             </div>
             <Dialog open={addOpen} onOpenChange={setAddOpen}>
               <DialogTrigger asChild>
-                <Button className="h-10">일정 추가</Button>
+                <Button variant="outline" className="h-10">
+                  일정 추가
+                </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
@@ -627,6 +619,34 @@ export default function CalendarPage() {
             </Dialog>
           </div>
         </div>
+        <button
+          type="button"
+          onClick={() => setSomoimImportOpen(true)}
+          className="group flex w-full items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 text-left shadow-sm transition-all hover:border-primary/60 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+              <Download className="size-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold sm:text-base">
+                소모임 데이터 가져오기
+              </div>
+              <div className="text-xs text-muted-foreground">
+                일정 자동 생성 · 참석자 출석 처리까지 한 번에
+              </div>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <SomoimImportTutorial.HelpButton
+              onClick={() => setTutorialOpen(true)}
+            />
+            <ChevronRight className="size-5 text-primary transition-transform group-hover:translate-x-0.5" />
+          </div>
+        </button>
+        <SomoimImportTutorial.Panel
+          onShowDetail={() => setTutorialOpen(true)}
+        />
       </header>
 
       {loading && (
@@ -985,6 +1005,11 @@ export default function CalendarPage() {
         onOpenChange={setSomoimImportOpen}
         onUpdated={loadSchedules}
         adminMemberId={adminMemberId}
+      />
+      <SomoimImportTutorial.Dialog
+        open={tutorialOpen}
+        onOpenChange={setTutorialOpen}
+        onOpenImport={() => setSomoimImportOpen(true)}
       />
       <Dialog open={attendanceOpen} onOpenChange={setAttendanceOpen}>
         <DialogContent className="sm:max-w-sm">
